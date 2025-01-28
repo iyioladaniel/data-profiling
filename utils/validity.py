@@ -96,9 +96,9 @@ def validate_columns(file_path):
             print(f"  Validity Percentage: {valid_percent}%\n")
 
         # Save results to a new file
-        output_file = f"{file_path}_validation_results.csv"
-        data.to_csv(output_file, index=False)
-        print(f"Validation results saved to '{output_file}'.")
+        #output_file = f"{file_path}_validation_results.csv"
+        #data.to_csv(output_file, index=False)
+        #print(f"Validation results saved to '{output_file}'.")
 
     except FileNotFoundError:
         print(f"Error: File not found at path '{file_path}'. Please check the file path and try again.")
