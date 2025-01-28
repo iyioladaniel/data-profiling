@@ -179,7 +179,7 @@ def generate_customer_data(count=1):
     
     return df
 
-trial_df = generate_customer_data(5)
-trial_df
-profile = ProfileReport(trial_df, title="Trial Profiling Report")
-profile.to_file('trial_report.html')
+# trial_df = generate_customer_data(5)
+# trial_df
+# profile = ProfileReport(trial_df, title="Trial Profiling Report")
+# profile.to_file('trial_report.html')
