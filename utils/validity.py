@@ -72,7 +72,7 @@ def validate_id(value, id_type):
     if pd.isna(value) or value == "":
         return False
         
-    value = clean_id_value(value)
+    value = clean_id_value(value, id_type)
     pattern = re.compile(ID_PATTERNS[id_type])
     
     return bool(pattern.fullmatch(value))
@@ -127,8 +127,7 @@ def validate_columns(file_path):
             validity_dict["validity_percent"].append(valid_percent)
 
         # Create validity dataframe and output the results to a file
-        validity_df =pd.DataFrame(validity_dict)
-        #output_file = file_path.rsplit('.', 1)[0] + '_validation_results.csv'
+        validity_df = pd.DataFrame(validity_dict)
         output_file = './validation/' + str.split(file_path, "/")[-1].split(".")[0] + '_validation_results.csv'
         validity_df.to_csv(output_file, index=False)
         print(f"\nFull validation results saved to '{output_file}'")
@@ -154,4 +153,3 @@ if __name__ == "__main__":
 
     # Call the validation function
     validate_columns(csv_file_path)
-    
