@@ -22,7 +22,7 @@ def generate_11_digit_number(null_probability=0.2):
     else:
         # Generate number between 10000000000 and 99999999999
         number = fake.random_number(digits=11, fix_len=True)
-        return number
+        return int(number)
     
 def generate_nigerian_passport_id(null_probability=0.2):
     """
@@ -107,7 +107,7 @@ def generate_cac_number(null_probability=0.2):
 def generate_drivers_license(null_probability=0.2):
     """
     Generate a single driver's license number matching pattern A-BBBBBCC-DDDDDDD
-    Format: ^[A-Z]-[A-Z]{5}[0-9]{2}-[0-9]{7}$
+    Format: ^[A-Z]{3}[0-9]{5}[A-Z]{2}[0-9]{1,2}$
     
     Args:
         null_probability (float): Probability of generating None instead of an ID
@@ -118,12 +118,13 @@ def generate_drivers_license(null_probability=0.2):
     if random.random() < null_probability:
         return None
         
-    first_letter = random.choice(string.ascii_uppercase)
-    middle_letters = ''.join(random.choices(string.ascii_uppercase, k=5))
-    middle_numbers = ''.join(str(random.randint(0, 9)) for _ in range(2))
-    last_numbers = ''.join(str(random.randint(0, 9)) for _ in range(7))
+    #first_letter = random.choice(string.ascii_uppercase)
+    first_letters = ''.join(random.choices(string.ascii_uppercase, k=3))
+    middle_numbers = ''.join(str(random.randint(0, 9)) for _ in range(5))
+    middle_letters = ''.join(random.choices(string.ascii_uppercase, k=2))
+    last_numbers = ''.join(str(random.randint(0, 9)) for _ in range(1))
     
-    return f"{first_letter}-{middle_letters}{middle_numbers}-{last_numbers}"
+    return f"{first_letters}{middle_numbers}{middle_letters}{last_numbers}"
 
 def generate_customer_data(count=1):
     """
@@ -157,8 +158,8 @@ def generate_customer_data(count=1):
     for _ in range(count):
         data['customer_id'].append(str(fake.random_number(digits=11, fix_len=True)))
         data['occupation'].append(fake.job())
-        data['nin'].append(generate_11_digit_number(null_probability=0.4))
-        data['passport'].append(generate_nigerian_passport_id(null_probability=0.5))
+        data['nin'].append(generate_11_digit_number(null_probability=0.3))
+        data['passport'].append(generate_nigerian_passport_id(null_probability=0.2))
         data['country_of_birth'].append(fake.country())
         data['marital_status'].append(random.choice(["Single", "Married", "Widowed"]))
         data['drivers_license'].append(generate_drivers_license())
