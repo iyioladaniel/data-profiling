@@ -9,29 +9,27 @@ def load_data(file):
     return pd.read_csv(file)
 
 # Branding Section
-st.set_page_config(
-    page_title="Data Inventory Explorer",  # Sets the browser tab title
-    layout="wide",
-    page_icon="📊"  # Optional: Adds an emoji as the favicon
-)
+col1, col2 = st.columns([1, 3])  # Adjust the ratio as needed
 
-# Display the company logo
-st.image("./KPMG.png", width=200)  # Replace "company_logo.png" with your logo file path
+with col1:
+    st.image("./KPMG.png", width=75)  # Replace with your logo file path
 
-# App title and introduction
-st.title("📊 Data Inventory Explorer")
-st.markdown("""
-**Welcome to the Data Inventory Explorer!**
+with col2:
+    st.title("📊 Data Inventory Explorer")
+    st.markdown("""
+    **Welcome to the Data Inventory Explorer!**
 
-This app allows you to navigate, filter, and visualize the data inventory for your organization. Use the filters in the sidebar to explore tables, fields, and relationships. For more details, expand the rows in the table below or view the relationship mapping graph.
-""")
+    This app allows you to navigate, filter, and visualize the data inventory for your organization. Use the filters in the sidebar to explore tables, fields, and relationships.
+    """)
 
 # File handling
-uploaded_file = st.file_uploader("Upload your Data Inventory CSV (optional)", type=["csv"])
-if uploaded_file:
-    df = load_data(uploaded_file)
-else:
-    df = load_data("data_inventory.csv")  # Default file path
+#uploaded_file = st.file_uploader("Upload your Data Inventory CSV (optional)", type=["csv"])
+# if uploaded_file:
+#     df = load_data(uploaded_file)
+# else:
+#     df = load_data("data_inventory.csv")  # Default file path
+df = load_data("data_inventory.csv")
+
 
 # Sidebar filters
 with st.sidebar:
@@ -63,7 +61,7 @@ filtered_df = filter_data(df, company, domain, table_name, field_name, data_type
 
 # Display data table
 st.subheader("📋 Data Inventory Table")
-st.dataframe(filtered_df)
+st.dataframe(filtered_df, use_container_width=True)
 
 # Export filtered data
 if st.button("Export Filtered Data"):
@@ -86,10 +84,9 @@ with col2:
 
 # Data Type Distribution
 st.subheader("🛠️ Data Type Distribution")
-# fig = px.bar(df['Data Type'].value_counts().reset_index(), x='index', y='Data Type', title="Data Type Counts")
-# st.plotly_chart(fig)
-data_type_counts = df['Data Type'].value_counts()
-fig = px.bar(x=data_type_counts.index, y=data_type_counts.values, title="Data Type Counts")
+data_type_counts = df['Data Type'].value_counts().reset_index()
+data_type_counts.columns = ['Data Type', 'Count']
+fig = px.bar(data_type_counts, x='Data Type', y='Count', title="Data Type Counts")
 st.plotly_chart(fig)
 
 # Relationship Mapping
@@ -108,8 +105,84 @@ def visualize_relationships(df):
 
 visualize_relationships(df)
 
-# Expandable rows for details
-st.subheader("🔍 Detailed View")
-for index, row in filtered_df.iterrows():
-    with st.expander(f"Details for {row['Field Name']}"):
-        st.write(row)
+# Summary Statistics by Company and Domain
+st.subheader("📊 Summary Statistics by Company and Domain")
+company_domain_stats = (
+    df.groupby(["Company", "Domain"])
+    .agg(
+        Total_Tables=("Table Name", "nunique"),
+        Total_Fields=("Field Name", "count"),
+        Unique_Data_Types=("Data Type", "nunique"),
+        Nullable_Fields=("Nullable (Yes/No)", lambda x: (x == "Yes").sum()),
+        Non_Nullable_Fields=("Nullable (Yes/No)", lambda x: (x == "No").sum()),
+        Fields_with_Relationships=("Relationship Mapping", lambda x: (~x.isna()).sum())
+    )
+    .reset_index()
+)
+st.dataframe(company_domain_stats, use_container_width=True)
+
+# Visualizations
+st.subheader("📊 Total Tables per Company and Domain")
+fig_tables = px.bar(
+    company_domain_stats,
+    x="Company",
+    y="Total_Tables",
+    color="Domain",
+    title="Total Tables by Company and Domain",
+    barmode="group"
+)
+st.plotly_chart(fig_tables, use_container_width=True)
+
+st.subheader("📊 Field Distribution Across Companies")
+fig_fields = px.pie(
+    company_domain_stats,
+    names="Company",
+    values="Total_Fields",
+    title="Field Distribution Across Companies"
+)
+st.plotly_chart(fig_fields, use_container_width=True)
+
+st.subheader("📊 Nullable vs Non-Nullable Fields by Company")
+nullable_stats = company_domain_stats.melt(
+    id_vars=["Company", "Domain"],
+    value_vars=["Nullable_Fields", "Non_Nullable_Fields"],
+    var_name="Field_Type",
+    value_name="Count"
+)
+fig_nullable = px.bar(
+    nullable_stats,
+    x="Company",
+    y="Count",
+    color="Field_Type",
+    title="Nullable vs Non-Nullable Fields by Company",
+    barmode="stack"
+)
+st.plotly_chart(fig_nullable, use_container_width=True)
+
+st.subheader("📊 Unique Data Types per Company and Domain")
+fig_heatmap = px.density_heatmap(
+    company_domain_stats,
+    x="Company",
+    y="Domain",
+    z="Unique_Data_Types",
+    title="Unique Data Types by Company and Domain",
+    color_continuous_scale="Viridis"
+)
+st.plotly_chart(fig_heatmap, use_container_width=True)
+
+
+# Detailed View with Pagination
+# st.subheader("🔍 Detailed View")
+# rows_per_page = 10  # Number of rows per page
+# total_rows = len(filtered_df)
+# num_pages = (total_rows // rows_per_page) + (1 if total_rows % rows_per_page > 0 else 0)
+
+# page_number = st.number_input("Page Number", min_value=1, max_value=num_pages, value=1)
+# start_idx = (page_number - 1) * rows_per_page
+# end_idx = start_idx + rows_per_page
+
+# paginated_df = filtered_df.iloc[start_idx:end_idx]
+
+# for index, row in paginated_df.iterrows():
+#     with st.expander(f"Details for {row['Field Name']}"):
+#         st.write(row)
