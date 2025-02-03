@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import networkx as nx
+import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
 
@@ -9,10 +11,10 @@ import numpy as np
 st.set_page_config(
     page_title="Data Inventory Explorer",
     page_icon="📊",
-    layout="wide"  # This makes the app use the full width of the browser
+    layout="wide"
 )
 
-# Custom CSS to improve UI
+# Custom CSS for better UI
 st.markdown("""
     <style>
     .main > div {
@@ -30,14 +32,26 @@ st.markdown("""
     div[data-testid="stMetricValue"] {
         font-size: 2rem;
     }
+    .network-graph {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 10px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data  # Cache the data loading
+@st.cache_data
 def load_data(file_path):
-    return pd.read_csv(file_path)
+    df = pd.read_csv(file_path)
+    # Basic data validation
+    df['Data Quality Score'] = calculate_data_quality(df)
+    return df
 
-# Header section with improved layout
+def calculate_data_quality(df):
+    # Calculate a simple data quality score based on completeness
+    quality_score = df.notna().mean(axis=1) * 100
+    return quality_score.round(2)
+
 def render_header():
     col1, col2 = st.columns([1, 5])
     with col1:
@@ -48,27 +62,44 @@ def render_header():
         Explore and analyze your organization's data inventory with advanced filtering and visualization capabilities.
         """)
 
-# Sidebar filters with improved organization
-def render_sidebar_filters(df):
+def render_advanced_filters(df):
     with st.sidebar:
-        st.header("🔍 Filters")
+        st.header("🔍 Advanced Filters")
         
-        # Add reset filters button at the top
         if st.button("Reset All Filters", use_container_width=True):
             return {"company": "", "domain": "", "table": "", "field": "", 
-                   "data_type": "", "nullable": ""}
+                   "data_type": "", "nullable": "", "quality_threshold": 0,
+                   "has_relationships": None, "field_length": None}
         
         st.divider()
         
-        # Create multiselect filters instead of text inputs for better UX
+        # Basic filters
         filters = {
             "company": st.multiselect("Company", options=sorted(df['Company'].unique())),
             "domain": st.multiselect("Domain", options=sorted(df['Domain'].unique())),
             "table": st.multiselect("Table Name", options=sorted(df['Table Name'].unique())),
-            "field": st.text_input("Field Name"),  # Keep as text input due to potentially large number of fields
+            "field": st.text_input("Field Name"),
             "data_type": st.multiselect("Data Type", options=sorted(df['Data Type'].unique())),
             "nullable": st.selectbox("Nullable", options=["", "Yes", "No"])
         }
+        
+        # Advanced filtering options
+        st.subheader("Advanced Options")
+        filters["quality_threshold"] = st.slider(
+            "Minimum Data Quality Score (%)", 
+            0, 100, 0
+        )
+        
+        filters["has_relationships"] = st.radio(
+            "Relationship Status",
+            options=[None, "Has Relationships", "No Relationships"]
+        )
+        
+        filters["field_length"] = st.slider(
+            "Field Length Range",
+            0, df['Field Length'].max() if 'Field Length' in df.columns else 100,
+            (0, df['Field Length'].max() if 'Field Length' in df.columns else 100)
+        )
         
         return filters
 
@@ -76,6 +107,7 @@ def render_sidebar_filters(df):
 def filter_dataframe(df, filters):
     mask = pd.Series(True, index=df.index)
     
+    # Basic filters
     if filters["company"]:
         mask &= df['Company'].isin(filters["company"])
     if filters["domain"]:
@@ -89,82 +121,167 @@ def filter_dataframe(df, filters):
     if filters["nullable"]:
         mask &= df['Nullable (Yes/No)'] == filters["nullable"]
     
+    # Advanced filters
+    if filters["quality_threshold"] > 0:
+        mask &= df['Data Quality Score'] >= filters["quality_threshold"]
+    
+    if filters["has_relationships"] == "Has Relationships":
+        mask &= df['Relationship Mapping'].notna()
+    elif filters["has_relationships"] == "No Relationships":
+        mask &= df['Relationship Mapping'].isna()
+    
+    if 'Field Length' in df.columns:
+        mask &= (df['Field Length'] >= filters["field_length"][0]) & \
+                (df['Field Length'] <= filters["field_length"][1])
+    
     return df[mask]
 
-def render_main_content(df, filtered_df):
-    # Data table with improved width
-    st.header("📋 Data Inventory")
-    st.dataframe(
-        filtered_df,
-        use_container_width=True,
-        height=400  # Fixed height for better layout
-    )
+def create_network_graph(df):
+    G = nx.Graph()
+    edges = []
     
-    # Export functionality
-    if st.button("Export Filtered Data", use_container_width=True):
-        csv = filtered_df.to_csv(index=False)
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name="filtered_data_inventory.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+    for _, row in df.iterrows():
+        if pd.notna(row['Relationship Mapping']):
+            source = f"{row['Table Name']}.{row['Field Name']}"
+            G.add_node(source, type='source')
+            
+            related_fields = str(row['Relationship Mapping']).split(',')
+            for target in related_fields:
+                target = target.strip()
+                G.add_node(target, type='target')
+                edges.append((source, target))
+    
+    G.add_edges_from(edges)
+    
+    return G
 
-def render_statistics(df, filtered_df):
-    st.header("📊 Summary Statistics")
+def render_network_visualization(G):
+    st.subheader("🔗 Relationship Network Graph")
     
-    # Key metrics in a 4-column layout
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Tables", filtered_df['Table Name'].nunique())
-    with col2:
-        st.metric("Total Fields", len(filtered_df))
-    with col3:
-        st.metric("Data Types", filtered_df['Data Type'].nunique())
-    with col4:
-        st.metric("Nullable Fields", (filtered_df['Nullable (Yes/No)'] == 'Yes').sum())
+    if G.number_of_edges() > 0:
+        fig, ax = plt.subplots(figsize=(15, 10))
+        pos = nx.spring_layout(G, k=1, iterations=50)
+        
+        # Draw nodes
+        nx.draw_networkx_nodes(G, pos, 
+                             node_color='lightblue',
+                             node_size=1000,
+                             alpha=0.7)
+        
+        # Draw edges
+        nx.draw_networkx_edges(G, pos, 
+                             edge_color='gray',
+                             alpha=0.5)
+        
+        # Draw labels
+        nx.draw_networkx_labels(G, pos, 
+                              font_size=8,
+                              font_weight='bold')
+        
+        plt.title("Field Relationships Network")
+        st.pyplot(fig)
+    else:
+        st.info("No relationships found in the filtered dataset.")
+
+def render_summary_stats(df):
+    st.header("📊 Cross-Company Domain Analysis")
+    
+    # Create summary statistics
+    summary = df.groupby(['Company', 'Domain']).agg({
+        'Table Name': 'nunique',
+        'Field Name': 'count',
+        'Data Type': 'nunique',
+        'Nullable (Yes/No)': lambda x: (x == 'Yes').sum(),
+        'Relationship Mapping': lambda x: x.notna().sum(),
+        'Data Quality Score': 'mean'
+    }).round(2)
+    
+    summary.columns = [
+        'Unique Tables',
+        'Total Fields',
+        'Unique Data Types',
+        'Nullable Fields',
+        'Fields with Relations',
+        'Avg Quality Score'
+    ]
+    
+    st.dataframe(summary, use_container_width=True)
+    
+    # Create heatmap
+    fig = px.density_heatmap(
+        df,
+        x='Company',
+        y='Domain',
+        z='Data Quality Score',
+        title='Data Quality Score by Company and Domain',
+        color_continuous_scale='Viridis'
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 def render_visualizations(filtered_df):
     st.header("📈 Data Analysis")
     
-    # Create two columns for charts
     col1, col2 = st.columns(2)
     
     with col1:
-        # Data Type Distribution
+        # Data Type Distribution as donut chart
         data_type_counts = filtered_df['Data Type'].value_counts()
-        fig1 = px.bar(
-            data_type_counts,
-            title="Data Type Distribution",
-            labels={'index': 'Data Type', 'value': 'Count'},
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        fig1.update_layout(showlegend=False)
+        fig1 = go.Figure(data=[go.Pie(
+            labels=data_type_counts.index,
+            values=data_type_counts.values,
+            hole=0.4,
+            title="Data Type Distribution"
+        )])
+        fig1.update_layout(showlegend=True)
         st.plotly_chart(fig1, use_container_width=True)
     
     with col2:
-        # Domain Distribution
+        # Domain Distribution as donut chart
         domain_counts = filtered_df['Domain'].value_counts()
-        fig2 = px.pie(
+        fig2 = go.Figure(data=[go.Pie(
+            labels=domain_counts.index,
             values=domain_counts.values,
-            names=domain_counts.index,
-            title="Distribution by Domain",
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
+            hole=0.4,
+            title="Distribution by Domain"
+        )])
         st.plotly_chart(fig2, use_container_width=True)
     
     # Relationship Analysis
     if 'Relationship Mapping' in filtered_df.columns:
-        st.subheader("🔗 Field Relationships")
         relationship_stats = filtered_df['Relationship Mapping'].notna().value_counts()
-        fig3 = px.pie(
+        fig3 = go.Figure(data=[go.Pie(
+            labels=['With Relations', 'No Relations'],
             values=relationship_stats.values,
-            names=['With Relations', 'No Relations'],
+            hole=0.4,
             title="Fields with Relationships",
-            color_discrete_sequence=['#2ecc71', '#e74c3c']
-        )
+            marker_colors=['#2ecc71', '#e74c3c']
+        )])
         st.plotly_chart(fig3, use_container_width=True)
+
+def render_relationship_analysis(df):
+    st.header("🔍 Detailed Relationship Analysis")
+    
+    # Calculate relationship metrics
+    total_fields = len(df)
+    fields_with_relations = df['Relationship Mapping'].notna().sum()
+    relation_percentage = (fields_with_relations / total_fields * 100).round(2)
+    
+    # Display metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Fields with Relations", fields_with_relations)
+    with col2:
+        st.metric("Total Fields", total_fields)
+    with col3:
+        st.metric("Relation Coverage", f"{relation_percentage}%")
+    
+    # Relationship patterns
+    if fields_with_relations > 0:
+        st.subheader("Common Relationship Patterns")
+        relationship_patterns = df[df['Relationship Mapping'].notna()].groupby(
+            ['Table Name', 'Field Name', 'Relationship Mapping']
+        ).size().reset_index(name='count')
+        st.dataframe(relationship_patterns.sort_values('count', ascending=False))
 
 def main():
     # Load data
@@ -172,16 +289,37 @@ def main():
     
     # Render UI components
     render_header()
-    filters = render_sidebar_filters(df)
+    filters = render_advanced_filters(df)
     filtered_df = filter_dataframe(df, filters)
     
     # Main content
-    render_main_content(df, filtered_df)
+    st.header("📋 Data Inventory")
+    st.dataframe(filtered_df, use_container_width=True, height=400)
     
-    # Statistics and visualizations
     if not filtered_df.empty:
-        render_statistics(df, filtered_df)
+        # Export functionality
+        if st.button("Export Filtered Data", use_container_width=True):
+            csv = filtered_df.to_csv(index=False)
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name="filtered_data_inventory.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        # Visualizations
         render_visualizations(filtered_df)
+        
+        # Network graph
+        G = create_network_graph(filtered_df)
+        render_network_visualization(G)
+        
+        # Summary statistics
+        render_summary_stats(filtered_df)
+        
+        # Detailed relationship analysis
+        render_relationship_analysis(filtered_df)
     else:
         st.warning("No data matches the selected filters. Please adjust your selection.")
 
