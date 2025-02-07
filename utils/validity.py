@@ -13,7 +13,7 @@ ID_PATTERNS = {
 # Column name aliases for matching
 COLUMN_ALIASES = {
     "nin": ["nin", "nationalid", "nationalidentification"],
-    "bvn": ["bvn", "bankverification", "bankverificationnumber"],
+    "bvn": ["bvn", "bankverification", "bankverificationnumber", "customerbvn"],
     "passport": ["passport", "passportnumber", "internationalpassport"],
     "driverslicense": ["driverslicense", "driverlicence", "driverslicence", "driverlicense", "dlicense"]
 }

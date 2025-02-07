@@ -31,7 +31,7 @@ for _ in range(1000):
     default_value = ""
     nullable_value = random.choice(nullable)
     source_system = f"{company.replace(' ', '_')}_System"
-    relationship_mapping = f"{field_name} -> Related_Table.{field_name}" if random.random() > 0.5 else ""
+    relationship_mapping = f"Related_Table.{field_name}" if random.random() > 0.5 else ""
     sample_data = f"Sample_{random.randint(1000, 9999)}"
 
     data.append([

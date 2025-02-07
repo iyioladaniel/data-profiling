@@ -30,10 +30,13 @@ def convert_excel_to_csv(file_path):
         os.makedirs(output_dir, exist_ok=True)
         print(f"CSV files will be saved in the directory: {output_dir}")
         
+        # Get file name
+        file_name = str.split(file_path, "/")[-1].split(".")[0]
+        
         # Convert each sheet to a CSV file
         for sheet_name in sheet_names:
             df = pd.read_excel(excel_file, sheet_name=sheet_name)
-            csv_file_path = os.path.join(output_dir, f"{sheet_name}.csv")
+            csv_file_path = os.path.join(output_dir, f"{file_name}_{sheet_name}.csv")
             df.to_csv(csv_file_path, index=False)
             print(f"Converted sheet '{sheet_name}' to CSV: {csv_file_path}")
         
