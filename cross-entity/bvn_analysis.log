@@ -26,3 +26,10 @@
 2025-02-12 23:34:41,078 - INFO - Saved Venn diagram: 3way_securities_trustees-digital_trustees-traditional_bvn_overlap.png
 2025-02-12 23:34:43,073 - INFO - Excel report saved: bvn_analysis_report.xlsx
 2025-02-12 23:34:43,073 - INFO - Analysis completed successfully
+2025-02-12 23:57:48,487 - INFO - Starting analysis for: bvn_comparison.csv
+2025-02-12 23:57:48,890 - ERROR - Error generating reports: 'Entity Count'
+2025-02-12 23:59:25,003 - INFO - Starting analysis for: bvn_comparison.csv
+2025-02-12 23:59:25,617 - ERROR - Error generating reports: 'Entity Count'
+2025-02-13 00:00:47,147 - INFO - Starting analysis for: bvn_comparison.csv
+2025-02-13 00:00:49,103 - INFO - Excel report saved: bvn_analysis_report.xlsx
+2025-02-13 00:00:49,103 - INFO - Analysis completed successfully
