@@ -200,12 +200,12 @@ def main():
     
     # Configuration
     file_paths = {
-        "asset-management": "./asset_custdata.csv",
-        "trustees-digital": "./digital_trustees_custdata.csv",
-        "trustees-traditional": "./traditional_trustees_custdata.csv",
-        #"insurance": "./individual_insurance_custdata.csv",
-        "registrars": "./registrars_shold.csv",
-        "securities" : "./securities_custdata.csv"
+        "asset-management": "./dummy-data/asset_custdata.csv",
+        "trustees-digital": "./dummy-data/digital_trustees_custdata.csv",
+        "trustees-traditional": "./dummy-data/traditional_trustees_custdata.csv",
+        #"insurance": "./dummy-data/individual_insurance_custdata.csv",
+        "registrars": "./dummy-data/registrars_shold.csv",
+        "securities" : "./dummy-data/securities_custdata.csv"
     }
     
     columns_mapping = {
