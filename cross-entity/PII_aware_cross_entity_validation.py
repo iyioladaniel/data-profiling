@@ -79,6 +79,10 @@ def analyze_bvn_duplicates(file_paths: Dict[str, str], columns_mapping: Dict[str
     # Create serial id column
     bvn_df["serial_no"] = bvn_df.index + 1
     
+    logging.info("")
+    # Combine trustees traditional & digital
+    bvn_df.loc[(bvn_df.entity == "trustees-digital") | (bvn_df.entity == "trustees-traditional"), bvn_df.columns[2:]] = "trustees"
+    
     # Process duplicates
     bvn_df["duplicated?"] = bvn_df["BVN"].duplicated(keep=False)
     
