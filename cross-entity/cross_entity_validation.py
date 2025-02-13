@@ -209,12 +209,12 @@ def main():
     }
     
     columns_mapping = {
-        "asset-management": {"id": "CustAID", "bvn": "CustomerBVN"},
-        "trustees-digital": {"id": "platformuserid", "bvn": "Bvn"},
-        "trustees-traditional": {"id": "CustAID", "bvn": "CustomerBVN"},
-        #"insurance": {"id": "Customer ID", "bvn": "userBVN"},
-        "registrars": {"id": "Acctno", "bvn": "bvn"},
-        "securities": {"id": "CustAID", "bvn": "CustomerBVN"}
+        "asset-management": {"customer_id": "CustAID", "bvn": "CustomerBVN"},
+        "trustees-digital": {"customer_id": "platformuserid", "bvn": "Bvn"},
+        "trustees-traditional": {"customer_id": "CustAID", "bvn": "CustomerBVN"},
+        #"insurance": {"customer_id": "Customer ID", "bvn": "userBVN"},
+        "registrars": {"customer_id": "Acctno", "bvn": "bvn"},
+        "securities": {"customer_id": "CustAID", "bvn": "CustomerBVN"}
     }
     
     try:
