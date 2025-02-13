@@ -120,65 +120,83 @@ def load_data(file_path):
 
 def generate_reports(df):
     """
-    Generate analytical reports
+    Generate analytical reports while protecting PII (BVN) information.
     Returns tuple of (unique_counts, cross_entity, merged_details, entity_combinations)
     """
     try:
         # Unique BVNs per entity
         unique_counts = df.groupby('entity')['BVN'].nunique().reset_index()
-        unique_counts.columns = ['Entity', 'Unique BVN Count']
+        unique_counts.columns = ['Entity', 'Unique Customer Count']
         
-        # Cross-entity BVNs
+        # Cross-entity analysis
         cross_entity = df.groupby('BVN').agg(
             entity_count=('entity', 'nunique'),
             entities=('entity', lambda x: ', '.join(sorted(x.unique())))
         ).reset_index()
         
+        # Get the first occurrence of serial_no for each BVN
+        bvn_serial_mapping = df[['BVN', 'serial_no']].drop_duplicates(subset=['BVN'], keep='first')
+        
+        # Merge to add serial_no instead of mapping
+        cross_entity = cross_entity.merge(
+            bvn_serial_mapping[['BVN', 'serial_no']], 
+            on='BVN', 
+            how='left'
+        )
+        
+        # Remove BVN column after merging
+        cross_entity.drop('BVN', axis=1, inplace=True)
+        cross_entity = cross_entity[['serial_no', 'entity_count', 'entities']]
+        
         # Generate all possible entity combinations and their counts
         unique_entities = sorted(df['entity'].unique())
         entity_combinations = []
         
-        # For each possible number of entities (2 through total number of entities)
+        # For each possible number of entities
         for i in range(2, len(unique_entities) + 1):
             # Generate all possible combinations of that size
             for combo in combinations(unique_entities, i):
-                # Find BVNs that appear in all entities in this combination
+                # Find serial numbers that appear in all entities in this combination
                 mask = cross_entity['entities'].apply(
                     lambda x: all(entity in x.split(', ') for entity in combo)
                 )
-                bvns_in_combo = cross_entity[mask]['BVN'].tolist()
+                serials_in_combo = cross_entity[mask]['serial_no'].tolist()
                 
-                if bvns_in_combo:  # Only add if there are matching BVNs
+                if serials_in_combo:  # Only add if there are matching customers
                     entity_combinations.append({
                         'Combination Size': i,
                         'Entities': ' & '.join(combo),
-                        'BVN Count': len(bvns_in_combo),
-                        'BVNs': ', '.join(bvns_in_combo)
+                        'Customer Count': len(serials_in_combo),
+                        'Serial Numbers': ', '.join(map(str, serials_in_combo))
                     })
         
         # Create DataFrame and sort it
         entity_combinations_df = pd.DataFrame(entity_combinations)
         if not entity_combinations_df.empty:
             entity_combinations_df = entity_combinations_df.sort_values(
-                ['Combination Size', 'BVN Count'], 
+                ['Combination Size', 'Customer Count'], 
                 ascending=[True, False]
             )
         
         # Detailed records with duplicate information
         merged_details = pd.merge(
             df[['BVN', 'entity', 'customer_id', 'serial_no', 'duplicated?', 'duplicated_serial_no']],
-            cross_entity[['BVN', 'entity_count', 'entities']],
-            on='BVN',
+            cross_entity[['serial_no', 'entity_count', 'entities']],
+            on='serial_no',
             how='right'
-        ).sort_values(['BVN', 'entity'])
+        ).sort_values(['serial_no', 'entity'])
+        
+        # Remove BVN from final output
+        merged_details = merged_details.drop('BVN', axis=1)
         
         return unique_counts, cross_entity, merged_details, entity_combinations_df
         
     except Exception as e:
         logging.error(f"Error generating reports: {str(e)}")
-        raise  # Re-raise the exception to see the full error message
+        raise
 
-def save_excel_report(results, filename='bvn_analysis_report.xlsx'):
+
+def save_excel_report(results, filename='PII_aware_bvn_analysis_report.xlsx'):
     """Save all results to Excel with multiple sheets"""
     try:
         unique_counts, cross_entity, merged_details, entity_combinations = results
