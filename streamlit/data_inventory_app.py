@@ -97,13 +97,13 @@ def render_sidebar_filters(df):
         st.header("🔍 Filters")
         
         if st.button("Reset All Filters", use_container_width=True):
-            return {"company": [], "domain": [], "table": [], "field": "", 
+            return {"entity": [], "domain": [], "table": [], "field": "", 
                    "data_type": [], "nullable": "", "has_relationships": None}
         
         st.divider()
         
         filters = {
-            "company": st.multiselect("Company", options=sorted(df['Company'].unique())),
+            "entity": st.multiselect("Entity", options=sorted(df['Entity'].unique())),
             "domain": st.multiselect("Domain", options=sorted(df['Domain'].unique())),
             "table": st.multiselect("Table Name", options=sorted(df['Table Name'].unique())),
             "field": st.text_input("Field Name"),
@@ -121,8 +121,8 @@ def render_sidebar_filters(df):
 def filter_dataframe(df, filters):
     mask = pd.Series(True, index=df.index)
     
-    if filters["company"]:
-        mask &= df['Company'].isin(filters["company"])
+    if filters["entity"]:
+        mask &= df['Entity'].isin(filters["entity"])
     if filters["domain"]:
         mask &= df['Domain'].isin(filters["domain"])
     if filters["table"]:
@@ -152,25 +152,25 @@ def create_enhanced_network_graph(df):
         if pd.notna(row['Relationship Mapping']):
             # Source node (current field)
             source_field = row['Field Name']
-            source_id = f"{row['Company']}.{row['Table Name']}.{source_field}"
+            source_id = f"{row['Entity']}.{row['Table Name']}.{source_field}"
             
             # Store comprehensive node information
             node_info[source_id] = {
                 'type': 'field',
                 'field': source_field,
                 'table': row['Table Name'],
-                'company': row['Company'],
+                'entity': row['Entity'],
                 'domain': row['Domain'],
                 'data_type': row['Data Type'],
                 'nullable': row['Nullable (Yes/No)']
             }
             
             # Add table node
-            table_id = f"{row['Company']}.{row['Table Name']}"
+            table_id = f"{row['Entity']}.{row['Table Name']}"
             node_info[table_id] = {
                 'type': 'table',
                 'table': row['Table Name'],
-                'company': row['Company'],
+                'entity': row['Entity'],
                 'domain': row['Domain']
             }
             
@@ -185,12 +185,12 @@ def create_enhanced_network_graph(df):
                 target_info = df[df['Field Name'] == target].iloc[0] if not df[df['Field Name'] == target].empty else None
                 
                 if target_info is not None:
-                    target_id = f"{target_info['Company']}.{target_info['Table Name']}.{target}"
+                    target_id = f"{target_info['Entity']}.{target_info['Table Name']}.{target}"
                     node_info[target_id] = {
                         'type': 'field',
                         'field': target,
                         'table': target_info['Table Name'],
-                        'company': target_info['Company'],
+                        'entity': target_info['Entity'],
                         'domain': target_info['Domain'],
                         'data_type': target_info['Data Type'],
                         'nullable': target_info['Nullable (Yes/No)']
@@ -234,7 +234,7 @@ def render_enhanced_network_visualization(G, node_info, filtered_df):
             
             # Create more informative labels
             if info['type'] == 'table':
-                node_labels[node] = f"{info['company']}\n{info['table']}"
+                node_labels[node] = f"{info['entity']}\n{info['table']}"
             else:
                 node_labels[node] = info['field']
         
@@ -289,7 +289,7 @@ def render_enhanced_network_visualization(G, node_info, filtered_df):
                 tooltip_text += f"""
                 Field: {info['field']}
                 Table: {info['table']}
-                Company: {info['company']}
+                Entity: {info['entity']}
                 Domain: {info['domain']}
                 Data Type: {info['data_type']}
                 Nullable: {info['nullable']}
@@ -319,10 +319,10 @@ def render_enhanced_network_visualization(G, node_info, filtered_df):
                 for neighbor in neighbors:
                     if node_info[neighbor]['type'] == 'field':
                         relationships_data.append({
-                            'Source Company': info['company'],
+                            'Source Entity': info['entity'],
                             'Source Table': info['table'],
                             'Source Field': info['field'],
-                            'Target Company': node_info[neighbor]['company'],
+                            'Target Entity': node_info[neighbor]['entity'],
                             'Target Table': node_info[neighbor]['table'],
                             'Target Field': node_info[neighbor]['field']
                         })
@@ -376,13 +376,13 @@ def render_visualizations(df):
 
 def render_cross_company_analysis(df):
     render_section_info(
-        "Cross-Company Analysis",
+        "Cross-Entity Analysis",
         """Compare data structures and relationships across different companies and domains. 
         This analysis helps identify patterns in data organization and potential areas for standardization."""
     )
     
     st.subheader("Table Structure Comparison")
-    structure_analysis = df.groupby(['Company', 'Domain']).agg({
+    structure_analysis = df.groupby(['Entity', 'Domain']).agg({
         'Table Name': 'nunique',
         'Field Name': 'count',
         'Data Type': lambda x: x.nunique(),
@@ -398,8 +398,8 @@ def render_cross_company_analysis(df):
     
     st.dataframe(structure_analysis, use_container_width=True)
     
-    st.subheader("Data Type Distribution by Company")
-    datatype_dist = pd.crosstab(df['Company'], df['Data Type'])
+    st.subheader("Data Type Distribution by Entity")
+    datatype_dist = pd.crosstab(df['Entity'], df['Data Type'])
     fig = px.bar(datatype_dist, 
                  title="Data Type Usage Across Companies",
                  labels={'value': 'Count', 'variable': 'Data Type'},
@@ -407,7 +407,7 @@ def render_cross_company_analysis(df):
     st.plotly_chart(fig, use_container_width=True)
     
     st.subheader("Relationship Density Analysis")
-    relationship_density = df.groupby('Company').agg({
+    relationship_density = df.groupby('Entity').agg({
         'Field Name': 'count',
         'Relationship Mapping': lambda x: x.notna().sum()
     })
@@ -418,13 +418,13 @@ def render_cross_company_analysis(df):
     
     fig = px.bar(relationship_density,
                  y='Relationship Density',
-                 title="Relationship Density by Company (%)",
+                 title="Relationship Density by Entity (%)",
                  labels={'Relationship Density': 'Percentage of Fields with Relationships'})
     st.plotly_chart(fig, use_container_width=True)
 
 def main():
     # Load data
-    df = load_data("./data_inventory.csv")
+    df = load_data("dummy_data_inventory.csv")
     
     # Render UI components
     render_header()
@@ -469,7 +469,7 @@ def main():
         G, node_info = create_enhanced_network_graph(filtered_df)
         render_enhanced_network_visualization(G, node_info, filtered_df)
         
-        # Cross-company analysis
+        # Cross-entity analysis
         render_cross_company_analysis(filtered_df)
     else:
         st.warning("No data matches the selected filters. Please adjust your selection.")
