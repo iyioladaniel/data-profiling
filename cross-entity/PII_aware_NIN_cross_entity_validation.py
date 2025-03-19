@@ -12,21 +12,21 @@ def setup_logging():
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
-def analyze_bvn_duplicates(file_paths: Dict[str, str], columns_mapping: Dict[str, Dict[str, str]]) -> tuple:
+def analyze_nin_duplicates(file_paths: Dict[str, str], columns_mapping: Dict[str, Dict[str, str]]) -> tuple:
     """
-    Analyze BVN duplicates across multiple datasets.
+    Analyze NIN duplicates across multiple datasets.
     
     Args:
         file_paths: Dictionary mapping dataset names to file paths
         columns_mapping: Dictionary mapping dataset names to their column mappings
         
     Returns:
-        tuple: (DataFrame with BVN analysis, DataFrame with missing BVNs)
+        tuple: (DataFrame with NIN analysis, DataFrame with missing NINs)
     """
-    logging.info("Starting BVN duplicate analysis")
+    logging.info("Starting NIN duplicate analysis")
     
-    bvn_records: List[pd.DataFrame] = []
-    missing_bvn_records: List[pd.DataFrame] = []
+    nin_records: List[pd.DataFrame] = []
+    missing_nin_records: List[pd.DataFrame] = []
     
     # Process each dataset
     for dataset_name, file_path in file_paths.items():
@@ -38,34 +38,31 @@ def analyze_bvn_duplicates(file_paths: Dict[str, str], columns_mapping: Dict[str
                 file_path,
                 usecols=[
                     columns_mapping[dataset_name]["id"],
-                    columns_mapping[dataset_name]["bvn"]
+                    columns_mapping[dataset_name]["nin"]
                 ]
             )
             
             # Rename columns for consistency
             df.rename(columns={
                 columns_mapping[dataset_name]["id"]: "customer_id",
-                columns_mapping[dataset_name]["bvn"]: "BVN"
+                columns_mapping[dataset_name]["nin"]: "NIN"
             }, inplace=True)
-            
-            if type(df["BVN"])=="str":
-                df["BVN"] = df["BVN"].astype(int)
             
             # Add dataset identifier
             df["entity"] = dataset_name
             
-            # Handle missing BVNs
-            missing_mask = (df["BVN"].isna()) | (df["BVN"]=="-")
+            # Handle missing NINs
+            missing_mask = (df["NIN"].isna()) | (df["NIN"]=="-")
             if missing_mask.any():
                 missing_records = df[missing_mask].copy()
-                missing_records["reason"] = "Missing BVN"
-                missing_bvn_records.append(missing_records)
-                logging.warning(f"Found {missing_mask.sum()} missing BVNs in {dataset_name}")
+                missing_records["reason"] = "Missing NIN"
+                missing_nin_records.append(missing_records)
+                logging.warning(f"Found {missing_mask.sum()} missing NINs in {dataset_name}")
             
-            # Remove rows with missing BVNs for main analysis
+            # Remove rows with missing NINs for main analysis
             df = df[~missing_mask]
             
-            bvn_records.append(df)
+            nin_records.append(df)
             
         except FileNotFoundError:
             logging.error(f"File not found: {file_path}")
@@ -74,38 +71,35 @@ def analyze_bvn_duplicates(file_paths: Dict[str, str], columns_mapping: Dict[str
             logging.error(f"Error processing {dataset_name}: {str(e)}")
             continue
     
-    if not bvn_records:
+    if not nin_records:
         raise ValueError("No valid data found in any dataset")
     
     # Combine all valid records
-    bvn_df = pd.concat(bvn_records, ignore_index=True)
+    nin_df = pd.concat(nin_records, ignore_index=True)
     
     # Create serial id column
-    bvn_df["serial_no"] = bvn_df.index + 1
+    nin_df["serial_no"] = nin_df.index + 1
     
-    #logging.info("Converting float BVN to int")
-    #bvn_df["BVN"] = bvn_df["BVN"].apply(lambda x: x.astype(int) if x.dtype == 'float' else x)
-    
-    logging.info(f"Before combining trustees, total number of records: {len(bvn_df)}")
-    logging.info(f"Unique BVNs before combining trustees: {bvn_df['BVN'].nunique()}")
+    logging.info(f"Before combining trustees, total number of records: {len(nin_df)}")
+    logging.info(f"Unique NINs before combining trustees: {nin_df['NIN'].nunique()}")
     # Combine trustees traditional & digital
-    bvn_df.loc[(bvn_df.entity == "trustees-digital") | (bvn_df.entity == "trustees-traditional"), bvn_df.columns[2:]] = "trustees"
-    logging.info(f"Total records after combining trustees: {len(bvn_df)}")
-    logging.info(f"Unique BVNs after combining trustees: {bvn_df['BVN'].nunique()}")
-    logging.info(f"Records per entity:\n{bvn_df['entity'].value_counts()}")
+    nin_df.loc[(nin_df.entity == "trustees-digital") | (nin_df.entity == "trustees-traditional"), nin_df.columns[2:]] = "trustees"
+    logging.info(f"Total records after combining trustees: {len(nin_df)}")
+    logging.info(f"Unique NINs after combining trustees: {nin_df['NIN'].nunique()}")
+    logging.info(f"Records per entity:\n{nin_df['entity'].value_counts()}")
     
     logging.info("Moving to checking & processing duplicates.")
     # Process duplicates
-    bvn_df["duplicated?"] = bvn_df["BVN"].duplicated(keep=False)
+    nin_df["duplicated?"] = nin_df["NIN"].duplicated(keep=False)
     
     # Find first occurrence of duplicated IDs
-    duplicate_mapping = bvn_df[bvn_df["duplicated?"]].groupby("BVN")["serial_no"].first().to_dict()
-    bvn_df["duplicated_serial_no"] = bvn_df["BVN"].map(lambda x: duplicate_mapping.get(x, ""))
+    duplicate_mapping = nin_df[nin_df["duplicated?"]].groupby("NIN")["serial_no"].first().to_dict()
+    nin_df["duplicated_serial_no"] = nin_df["NIN"].map(lambda x: duplicate_mapping.get(x, ""))
     
-    # Create missing BVNs DataFrame if any were found
-    missing_bvn_df = pd.concat(missing_bvn_records, ignore_index=True) if missing_bvn_records else None
+    # Create missing NINs DataFrame if any were found
+    missing_nin_df = pd.concat(missing_nin_records, ignore_index=True) if missing_nin_records else None
     
-    return bvn_df, missing_bvn_df
+    return nin_df, missing_nin_df
 
 def check_data_quality(df):
     """
@@ -118,18 +112,18 @@ def check_data_quality(df):
     if null_counts.any():
         logging.warning(f"Found null values:\n{null_counts[null_counts > 0]}")
     
-    # Check for duplicate BVNs within same entity
+    # Check for duplicate NINs within same entity
     entity_dups = df.groupby('entity').apply(
-        lambda x: x['BVN'].duplicated().sum()
+        lambda x: x['NIN'].duplicated().sum()
     )
     if entity_dups.any():
-        logging.warning(f"Found duplicate BVNs within entities:\n{entity_dups[entity_dups > 0]}")
+        logging.warning(f"Found duplicate NINs within entities:\n{entity_dups[entity_dups > 0]}")
     
     # Log entity distribution
     logging.info(f"Records per entity:\n{df['entity'].value_counts()}")
     
-    # Log BVN statistics
-    logging.info(f"Total unique BVNs: {df['BVN'].nunique()}")
+    # Log NIN statistics
+    logging.info(f"Total unique NINs: {df['NIN'].nunique()}")
     logging.info(f"Total records: {len(df)}")
 
 def load_data(file_path):
@@ -141,14 +135,14 @@ def load_data(file_path):
         df = pd.read_csv(file_path)
         
         # Validate required columns
-        required_columns = ['customer_id', 'BVN', 'entity', 'serial_no', 'duplicated?', 'duplicated_serial_no']
+        required_columns = ['customer_id', 'NIN', 'entity', 'serial_no', 'duplicated?', 'duplicated_serial_no']
         missing = [col for col in required_columns if col not in df.columns]
         if missing:
             logging.error(f"Missing required columns: {', '.join(missing)}")
             sys.exit(1)
             
-        # Convert BVN to string to handle potential leading zeros
-        df['BVN'] = df['BVN'].astype(str)
+        # Convert NIN to string to handle potential leading zeros
+        df['NIN'] = df['NIN'].astype(str)
         
         return df
     
@@ -161,32 +155,32 @@ def load_data(file_path):
 
 # def generate_reports(df):
 #     """
-#     Generate analytical reports while protecting PII (BVN) information.
+#     Generate analytical reports while protecting PII (NIN) information.
 #     Returns tuple of (unique_counts, cross_entity, merged_details, entity_combinations)
 #     """
 #     try:
-#         # Unique BVNs per entity
-#         unique_counts = df.groupby('entity')['BVN'].nunique().reset_index()
+#         # Unique NINs per entity
+#         unique_counts = df.groupby('entity')['NIN'].nunique().reset_index()
 #         unique_counts.columns = ['Entity', 'Unique Customer Count']
         
 #         # Cross-entity analysis
-#         cross_entity = df.groupby('BVN').agg(
+#         cross_entity = df.groupby('NIN').agg(
 #             entity_count=('entity', 'nunique'),
 #             entities=('entity', lambda x: ', '.join(sorted(x.unique())))
 #         ).reset_index()
         
-#         # Get the first occurrence of serial_no for each BVN
-#         bvn_serial_mapping = df[['BVN', 'serial_no']].drop_duplicates(subset=['BVN'], keep='first')
+#         # Get the first occurrence of serial_no for each NIN
+#         nin_serial_mapping = df[['NIN', 'serial_no']].drop_duplicates(subset=['NIN'], keep='first')
         
 #         # Merge to add serial_no instead of mapping
 #         cross_entity = cross_entity.merge(
-#             bvn_serial_mapping[['BVN', 'serial_no']], 
-#             on='BVN', 
+#             nin_serial_mapping[['NIN', 'serial_no']], 
+#             on='NIN', 
 #             how='left'
 #         )
         
-#         # Remove BVN column after merging
-#         cross_entity.drop('BVN', axis=1, inplace=True)
+#         # Remove NIN column after merging
+#         cross_entity.drop('NIN', axis=1, inplace=True)
 #         cross_entity = cross_entity[['serial_no', 'entity_count', 'entities']]
         
 #         # Generate all possible entity combinations and their counts
@@ -221,14 +215,14 @@ def load_data(file_path):
         
 #         # Detailed records with duplicate information
 #         merged_details = pd.merge(
-#             df[['BVN', 'entity', 'customer_id', 'serial_no', 'duplicated?', 'duplicated_serial_no']],
+#             df[['NIN', 'entity', 'customer_id', 'serial_no', 'duplicated?', 'duplicated_serial_no']],
 #             cross_entity[['serial_no', 'entity_count', 'entities']],
 #             on='serial_no',
 #             how='right'
 #         ).sort_values(['serial_no', 'entity'])
         
-#         # Remove BVN from final output
-#         merged_details = merged_details.drop('BVN', axis=1)
+#         # Remove NIN from final output
+#         merged_details = merged_details.drop('NIN', axis=1)
         
 #         return unique_counts, cross_entity, merged_details, entity_combinations_df
         
@@ -238,20 +232,20 @@ def load_data(file_path):
 
 def generate_reports(df):
     """
-    Generate analytical reports while protecting PII (BVN) information.
+    Generate analytical reports while protecting PII (NIN) information.
     Memory-optimized version.
     """
     try:
         # Log initial dataframe size
         logging.info(f"Initial dataframe size: {len(df)} rows")
         
-        # Unique BVNs per entity (unchanged)
-        unique_counts = df.groupby('entity')['BVN'].nunique().reset_index()
+        # Unique NINs per entity (unchanged)
+        unique_counts = df.groupby('entity')['NIN'].nunique().reset_index()
         unique_counts.columns = ['Entity', 'Unique Customer Count']
         
         # Cross-entity analysis (optimized)
         logging.info("Starting cross-entity analysis...")
-        cross_entity = df.groupby('BVN').agg({
+        cross_entity = df.groupby('NIN').agg({
             'entity': lambda x: (len(set(x)), ', '.join(sorted(set(x))))
         }).reset_index()
         
@@ -262,21 +256,21 @@ def generate_reports(df):
         )
         cross_entity.drop('entity', axis=1, inplace=True)
         
-        # Get first serial_no for each BVN (optimized)
-        bvn_serial_mapping = df.sort_values('serial_no').groupby('BVN')['serial_no'].first().reset_index()
+        # Get first serial_no for each NIN (optimized)
+        nin_serial_mapping = df.sort_values('serial_no').groupby('NIN')['serial_no'].first().reset_index()
         
         # Merge efficiently
         cross_entity = cross_entity.merge(
-            bvn_serial_mapping, 
-            on='BVN', 
+            nin_serial_mapping, 
+            on='NIN', 
             how='left'
         )
         
-        # Remove BVN column after merging
-        cross_entity.drop('BVN', axis=1, inplace=True)
+        # Remove NIN column after merging
+        cross_entity.drop('NIN', axis=1, inplace=True)
         cross_entity = cross_entity[['serial_no', 'entity_count', 'entities']]
         
-        logging.info(f"Cross-entity analysis complete. Found {len(cross_entity)} unique BVNs")
+        logging.info(f"Cross-entity analysis complete. Found {len(cross_entity)} unique NINs")
         
         # Generate entity combinations more efficiently
         unique_entities = sorted(df['entity'].unique())
@@ -319,14 +313,14 @@ def generate_reports(df):
         
         # Optimize merged_details creation
         logging.info("Creating merged details...")
-        merged_details = df[['BVN', 'entity', 'customer_id', 'serial_no', 'duplicated?', 'duplicated_serial_no']].copy()
+        merged_details = df[['NIN', 'entity', 'customer_id', 'serial_no', 'duplicated?', 'duplicated_serial_no']].copy()
         merged_details = merged_details.merge(
             cross_entity[['serial_no', 'entity_count', 'entities']],
             on='serial_no',
             how='left'
         )
         merged_details.sort_values(['serial_no', 'entity'], inplace=True)
-        merged_details.drop('BVN', axis=1, inplace=True)
+        merged_details.drop('NIN', axis=1, inplace=True)
         
         logging.info(f"Final merged_details size: {len(merged_details)} rows")
         
@@ -339,7 +333,7 @@ def generate_reports(df):
 def save_to_csv(dataframe):
     """Save large records of dataframe to csv"""
 
-def save_excel_report(results, filename='PII_aware_bvn_analysis_report.xlsx'):
+def save_excel_report(results, filename='PII_aware_nin_analysis_report.xlsx'):
     """
     Save all results to Excel with multiple sheets, properly handling large datasets
     by splitting them into multiple sheets when necessary.
@@ -350,8 +344,8 @@ def save_excel_report(results, filename='PII_aware_bvn_analysis_report.xlsx'):
         
         with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
             # Save smaller DataFrames normally
-            unique_counts.to_excel(writer, sheet_name='Unique BVNs per Entity', index=False)
-            cross_entity.to_excel(writer, sheet_name='Cross-Entity BVNs', index=False)
+            unique_counts.to_excel(writer, sheet_name='Unique NINs per Entity', index=False)
+            cross_entity.to_excel(writer, sheet_name='Cross-Entity NINs', index=False)
             entity_combinations.to_excel(writer, sheet_name='Entity Combinations', index=False)
             
             # Handle merged_details with chunking
@@ -404,41 +398,33 @@ def main():
     
     # Configuration
     file_paths = {
-        "asset-management": "./asset_custdata.csv",
-        "trustees-digital": "./digital_trustees_custdata.csv",
-        "trustees-traditional": "./traditional_trustees_custdata.csv",
-        #"insurance": "./dummy-data/individual_insurance_custdata.csv",
-        "registrars": "./registrars_shold.csv",
-        "securities" : "./securities_custdata.csv"
+        "trustees": "./dummy-data/digital_trustees_custdata_pivot.csv",
+        "insurance": "./dummy-data/individual_insurance_custdata.csv"
     }
     
     columns_mapping = {
-        "asset-management": {"id": "CustAID", "bvn": "CustomerBVN"},
-        "trustees-digital": {"id": "platformuserid", "bvn": "Bvn"},
-        "trustees-traditional": {"id": "CustAID", "bvn": "CustomerBVN"},
-        #"insurance": {"id": "Customer ID", "bvn": "userBVN"},
-        "registrars": {"id": "Acctno", "bvn": "bvn"},
-        "securities": {"id": "CustAID", "bvn": "CustomerBVN"}
+        "trustees": {"id": "platformuserid", "nin": "Bvn"},
+        "insurance": {"id": "Customer ID", "nin": "userNIN"}
     }
     
     try:
         # Perform analysis
-        bvn_df, missing_bvn_df = analyze_bvn_duplicates(file_paths, columns_mapping)
+        nin_df, missing_nin_df = analyze_nin_duplicates(file_paths, columns_mapping)
         
         # Add data quality check
-        check_data_quality(bvn_df)
+        check_data_quality(nin_df)
         
         # Save results
-        bvn_df.to_csv("bvn_comparison.csv", index=False)
-        logging.info("BVN comparison saved to 'bvn_comparison.csv'")
+        nin_df.to_csv("nin_comparison.csv", index=False)
+        logging.info("NIN comparison saved to 'nin_comparison.csv'")
         
-        if missing_bvn_df is not None:
-            missing_bvn_df.to_csv("missing_bvns.csv", index=False)
-            logging.info("Missing BVNs saved to 'missing_bvns.csv'")
+        if missing_nin_df is not None:
+            missing_nin_df.to_csv("missing_nins.csv", index=False)
+            logging.info("Missing NINs saved to 'missing_nins.csv'")
         
         # Load and process data
-        logging.info("Loading bvn_comparison.csv for cross-entity analysis.")
-        df = load_data("bvn_comparison.csv")
+        logging.info("Loading nin_comparison.csv for cross-entity analysis.")
+        df = load_data("nin_comparison.csv")
         
         logging.info("Data loaded successfully, starting data processing")
         reports = generate_reports(df)
@@ -448,7 +434,7 @@ def main():
         save_excel_report(reports)
         
         logging.info("Analysis completed successfully")
-        logging.info("Report saved to bvn_analysis_report.xlsx")
+        logging.info("Report saved to nin_analysis_report.xlsx")
 
         
     except Exception as e:

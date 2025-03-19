@@ -11,15 +11,24 @@ if [ $# -ne 1 ]; then
 fi
 
 input_file="$1"
-output_file="${input_file}.hashed"
+intermediary_file="${input_file}.cleaned"
+output_file="${intermediary_file}.hashed"
+
 
 # Ensure output file is empty before writing
+> "$intermediary_file"
 > "$output_file"
+
+grep -oE '\b[0-9]{11}\b' "$input_file" > "$intermediary_file"
 
 # Read each line, trim leading and trailing spaces, hash it, and save to the output file
 while IFS= read -r line; do
-    trimmed_line=$(echo "$line" | awk '{$1=$1; print}')
-    echo -n "$trimmed_line" | sha512sum | awk '{print $1}' >> "$output_file"
-done < "$input_file"
+    trimmed_line=$(echo "$line" | awk '{$1=$1; print}') #Trim spaces using awk
+    #trimmed_line=$(echo "$line" | sed 's/^[ \t]*//;s/[ \t]*$//')  # Trim spaces using sed
+     # Check if the line has exactly 11 digits
+    if echo "$trimmed_line" | grep -qE '^[0-9]{11}$'; then
+        echo -n "$trimmed_line" | sha512sum | awk '{print $1}' >> "$output_file"
+    fi
+done < "$intermediary_file"
 
 echo "Hashes saved in $output_file"
