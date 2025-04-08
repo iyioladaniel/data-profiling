@@ -1,7 +1,21 @@
 from ydata_profiling import ProfileReport
 import argparse
 import pandas as pd
+import json
 #import string
+
+def read_json_ydata(ydata_json):
+    # open file
+    with open(ydata_json) as json_data:
+        data = json.load(json_data)
+        print(data.keys())
+    
+    # obtain values in the "vaariables" key and store in .csv file
+    df = pd.DataFrame(data['variables'])
+    df.transpose().to_csv(f'{ydata_json}.csv, index=True)
+    
+    print("Variables statistics have successfuly been copied into .csv file")
+
 
 def generate_profiling_report(path_to_csv):
     """
@@ -18,6 +32,8 @@ def generate_profiling_report(path_to_csv):
         data = pd.read_csv(path_to_csv)    
         profile = ProfileReport(data, title=f"{file_name} Profiling Report", explorative=True)
         profile.to_file(f'{file_name}.html')
+        json_data = profile.to_json()
+        profile.to_file(f'{file_name}.json')
     except FileNotFoundError:
         print(f"Error: File not found at the path '{path_to_csv}'. Please check the path and try again.")
     except pd.errors.EmptyDataError:
