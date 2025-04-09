@@ -5,19 +5,6 @@ import pandas as pd
 import hashlib
 import json
 
-# Merged function from both files
-def read_json_ydata(ydata_json):
-    # open file
-    #with open(ydata_json) as json_data:
-    data = json.load(ydata_json)
-    print(data.keys())
-    
-    # obtain values in the "variables" key and store in .csv file
-    df = pd.DataFrame(data['variables'])
-    df.transpose().to_csv(f'{ydata_json}.csv', index=True)
-    
-    print("Variables statistics have successfully been copied into .csv file")
-
 
 def hash_column(column):
     """Hash the values in a column using SHA-256."""
@@ -64,10 +51,17 @@ def generate_profiling_report(path_to_csv, sensitive_columns=None):
             explorative=True,
             config=config)
         
+        # Generate HTML report
         profile.to_file(f'{file_name}.html')
+        
+        # Get JSON data and convert to CSV without saving the JSON file
         json_data = profile.to_json()
-        # profile.to_file(f'{file_name}.json')
-        read_json_ydata(json_data)
+        
+        # Extract variables data directly from the JSON and save to CSV
+        variables_df = pd.DataFrame(json.loads(json_data)['variables'])
+        variables_df.transpose().to_csv(f'{file_name}_variables.csv', index=True)
+        
+        print(f"Variables statistics have successfully been copied into {file_name}_variables.csv file")
         
     except FileNotFoundError:
         print(f"Error: File not found at the path '{path_to_csv}'. Please check the path and try again.")
