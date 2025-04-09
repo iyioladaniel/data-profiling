@@ -3,6 +3,7 @@
 # This script automates the moving files with .csv, .xlsx, .xls format from and into the 
 # specified directories
 # Usage: ./script_name.sh
+# code by Oluwatobi
 
 function filepath_not_valid () { #function to confirm valid file path was input
 

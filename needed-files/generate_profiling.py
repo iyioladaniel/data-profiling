@@ -1,23 +1,57 @@
 from ydata_profiling import ProfileReport
+from ydata_profiling.config import Settings
 import argparse
 import pandas as pd
+import hashlib
 #import string
 
-def generate_profiling_report(path_to_csv):
+def hash_column(column):
+    """Hash the values in a column using SHA-256."""
+    return column.apply(lambda x: hashlib.sha256(str(x).encode()).hexdigest() if pd.notnull(x) else x)
+
+
+def generate_profiling_report(path_to_csv, sensitive_columns=None):
     """
     Generate an profiling report (in html) using ydata-profiling
     
     Args:
         path_to_csv (str): path to csv 
+        sensitive_columns (list): List of column names to mark as sensitive
         
     Returns:
-        int: a single 11-digit number as int or None
+        None
     """
     try:    
         file_name = str.split(path_to_csv, "/")[-1].split(".")[0]
-        data = pd.read_csv(path_to_csv)    
-        profile = ProfileReport(data, title=f"{file_name} Profiling Report", explorative=True)
+        data = pd.read_csv(path_to_csv)
+        
+        # Automatically detect sensitive columns
+        sensitive_keywords = ["bvn", "id number", "nin", "passport", "driver", "identificationnumber", "chn"]
+        sensitive_columns = [
+            col for col in data.columns 
+            if any(keyword in col.lower() for keyword in sensitive_keywords)
+        ]
+        
+        # Hash sensitive columns
+        if sensitive_columns:
+            for col in sensitive_columns:
+                print(f"Hashing sensitive column: {col}")
+                data[col] = hash_column(data[col])
+        
+        # Configure settings to mark sensitive columns
+        config = Settings()
+        if sensitive_columns:
+            config.variables.descriptions = {col: "Sensitive Data (Hashed)" for col in sensitive_columns}
+        
+        # Generate profiling report    
+        profile = ProfileReport(
+            data,
+            title=f"{file_name} Profiling Report",
+            explorative=True,
+            config=config)
+        
         profile.to_file(f'{file_name}.html')
+        
     except FileNotFoundError:
         print(f"Error: File not found at the path '{path_to_csv}'. Please check the path and try again.")
     except pd.errors.EmptyDataError:
@@ -50,5 +84,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
