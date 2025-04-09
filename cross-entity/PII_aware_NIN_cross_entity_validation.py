@@ -403,8 +403,8 @@ def main():
     }
     
     columns_mapping = {
-        "trustees": {"id": "platformuserid", "nin": "Bvn"},
-        "insurance": {"id": "Customer ID", "nin": "userNIN"}
+        "trustees": {"id": "platformuserid", "nin": "NIN"},
+        "insurance": {"id": "Customer ID", "nin": "NIN"}
     }
     
     try:
