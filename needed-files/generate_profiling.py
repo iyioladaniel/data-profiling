@@ -4,19 +4,19 @@ import argparse
 import pandas as pd
 import hashlib
 import json
-#import string
 
+# Merged function from both files
 def read_json_ydata(ydata_json):
     # open file
     with open(ydata_json) as json_data:
         data = json.load(json_data)
         print(data.keys())
     
-    # obtain values in the "vaariables" key and store in .csv file
+    # obtain values in the "variables" key and store in .csv file
     df = pd.DataFrame(data['variables'])
     df.transpose().to_csv(f'{ydata_json}.csv', index=True)
     
-    print("Variables statistics have successfuly been copied into .csv file")
+    print("Variables statistics have successfully been copied into .csv file")
 
 
 def hash_column(column):
@@ -26,7 +26,7 @@ def hash_column(column):
 
 def generate_profiling_report(path_to_csv, sensitive_columns=None):
     """
-    Generate an profiling report (in html) using ydata-profiling
+    Generate a profiling report (in html) using ydata-profiling
     
     Args:
         path_to_csv (str): path to csv 
@@ -78,6 +78,7 @@ def generate_profiling_report(path_to_csv, sensitive_columns=None):
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
+
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Generate ydata profiling report as html.")
@@ -94,10 +95,11 @@ def main():
     # Generate report
     generate_profiling_report(args.csv)
     
-    #Get file name from the argument passed
+    # Get file name from the argument passed
     file_name = str.split(args.csv, "/")[-1].split(".")[0]
     
     print(f"Generated profiling report and saved to {file_name}.html.")
+
 
 if __name__ == "__main__":
     main()
