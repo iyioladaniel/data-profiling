@@ -4,3 +4,5 @@
 *.xlsx
 *.*.*
 *.hashed
+*.json
+*.txt
