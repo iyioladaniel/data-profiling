@@ -4,3 +4,6 @@
 *.xlsx
 *.*.*
 *.hashed
+*.json
+*.txt
+*checksum*

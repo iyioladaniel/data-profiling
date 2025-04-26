@@ -5,7 +5,7 @@ import sys
 # Predefined regex patterns for Nigerian identity codes
 ID_PATTERNS = {
     "nin": r"^\d{11}(\.0)?$",  # National Identification Number (11 digits) with optional ".0" in cases where the number is saved as a float
-    "bvn": r"^\d{11}(\.0)?$",  # Bank Verification Number (11 digits) with optional ".0" in cases where the number is saved as a float
+    "bvn": r"^22\d{9}(\.0)?$",  # Bank Verification Number (11 digits) with optional ".0" in cases where the number is saved as a float
     "passport": r"^[A-Z]\d{8}$",  # Nigerian Passport Number (1 letter followed by 8 digits)
     "driverslicense": r"^[A-Z]{3}\d{5}[A-Z]{2}\d{1,2}$"  # Nigerian Driver's License (FRN123456AB12 format)
 }

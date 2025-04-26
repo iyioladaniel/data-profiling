@@ -3,7 +3,8 @@ from ydata_profiling.config import Settings
 import argparse
 import pandas as pd
 import hashlib
-#import string
+import json
+
 
 def hash_column(column):
     """Hash the values in a column using SHA-256."""
@@ -12,7 +13,7 @@ def hash_column(column):
 
 def generate_profiling_report(path_to_csv, sensitive_columns=None):
     """
-    Generate an profiling report (in html) using ydata-profiling
+    Generate a profiling report (in html) using ydata-profiling
     
     Args:
         path_to_csv (str): path to csv 
@@ -50,7 +51,17 @@ def generate_profiling_report(path_to_csv, sensitive_columns=None):
             explorative=True,
             config=config)
         
+        # Generate HTML report
         profile.to_file(f'{file_name}.html')
+        
+        # Get JSON data and convert to CSV without saving the JSON file
+        json_data = profile.to_json()
+        
+        # Extract variables data directly from the JSON and save to CSV
+        variables_df = pd.DataFrame(json.loads(json_data)['variables'])
+        variables_df.transpose().to_csv(f'{file_name}_variables.csv', index=True)
+        
+        print(f"Variables statistics have successfully been copied into {file_name}_variables.csv file")
         
     except FileNotFoundError:
         print(f"Error: File not found at the path '{path_to_csv}'. Please check the path and try again.")
@@ -60,6 +71,7 @@ def generate_profiling_report(path_to_csv, sensitive_columns=None):
         print(f"Error: There was an issue parsing the file at '{path_to_csv}'. Is it a valid CSV?")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
+
 
 def main():
     # Set up argument parser
@@ -77,10 +89,11 @@ def main():
     # Generate report
     generate_profiling_report(args.csv)
     
-    #Get file name from the argument passed
+    # Get file name from the argument passed
     file_name = str.split(args.csv, "/")[-1].split(".")[0]
     
     print(f"Generated profiling report and saved to {file_name}.html.")
+
 
 if __name__ == "__main__":
     main()
