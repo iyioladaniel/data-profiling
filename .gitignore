@@ -6,3 +6,4 @@
 *.hashed
 *.json
 *.txt
+*checksum*

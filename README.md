@@ -1,48 +1,39 @@
 # Data Profiling Project
 
-## Overview
+A comprehensive tool for data profiling, validation, and cross-entity analysis with support for secure handling of personally identifiable information (PII).
 
-This project provides tools for data profiling, validation, and cross-entity analysis. It's designed to help identify and validate patterns in data across multiple sources, with a focus on handling sensitive personally identifiable information (PII) securely.
-
-## Features
-
-- **Data Profiling**: Generate comprehensive data profiling reports using ydata-profiling
-- **Cross-Entity Validation**: Compare and validate data across multiple data sources
-- **PII-Aware Processing**: Handle sensitive data with appropriate privacy measures
-- **Data Hashing**: Secure handling of sensitive identifiers like BVNs and NINs
-- **Data Visualization**: Streamlit apps for interactive data exploration
-- **Data Validation**: Validate data fields against expected patterns
-
-## Project Structure
+## Current Project Structure
 
 ```
 data-profiling/
-│
-├── src/                              # Source code directory
-│   ├── profiling/                    # Data profiling functionality
-│   ├── cross_entity/                 # Cross-entity validation
-│   ├── hashing/                      # Hashing functionality
-│   ├── utils/                        # Utility functions
-│   └── streamlit/                    # Streamlit apps
-│
-├── data/                             # Data directory
-│   ├── raw/                          # Raw input data
-│   ├── processed/                    # Processed data
-│   └── dummy/                        # Generated dummy data
-│
-├── reports/                          # Generated reports
-│   ├── html/                         # HTML reports
-│   ├── json/                         # JSON reports
-│   └── csv/                          # CSV reports
-│
-├── scripts/                          # Utility scripts
-├── notebooks/                        # Jupyter notebooks
-├── config/                           # Configuration files
-├── docs/                             # Documentation
-├── tests/                            # Test files
-│
-├── requirements.txt                  # Python dependencies
-└── README.md                         # Project documentation
+├── config/                         # Configuration files
+├── data/                           # Data files
+├── reports/                        # Generated reports
+├── scripts/                        # Scripts
+│   ├── cross-entity/               # Cross-entity validation scripts
+│   │   ├── multiple-ids/           # Multiple ID validation
+│   │   ├── cross_entity_validation.py
+│   │   ├── dynamic_hashed_cross_entity_analysis.py
+│   │   ├── hashed_cross_entity_analysis.py
+│   │   ├── PII_aware_cross_entity_validation.py
+│   │   └── PII_aware_NIN_cross_entity_validation.py
+│   ├── generate-dummy-data/        # Data generation scripts
+│   │   ├── CustomerDataCorporate.py
+│   │   ├── CustomerDataIndividual.py
+│   │   └── generate_random.py
+│   ├── hashing/                    # PII hashing utilities
+│   ├── duplicate_bvn_analysis.py
+│   ├── generate_profiling.py
+│   └── validity_of_national_ids.py
+├── streamlit/                      # Streamlit applications
+│   ├── app.py
+│   ├── app2.py
+│   └── data_inventory_app.py
+├── tests/                          # Test files
+├── utils/                          # Utility scripts
+│   └── convert_excel2csv.py
+├── requirements.txt                # Python dependencies
+└── README.md                       # Project documentation
 ```
 
 ## Installation
@@ -71,7 +62,7 @@ pip install -r requirements.txt
 To generate a profiling report for a CSV file:
 
 ```bash
-python src/profiling/generate_profiling.py --csv path/to/your.csv
+python scripts/generate_profiling.py --csv path/to/your.csv
 ```
 
 This will create an HTML report with detailed statistics about your data.
@@ -79,7 +70,7 @@ This will create an HTML report with detailed statistics about your data.
 ### Converting Excel to CSV
 
 ```bash
-python src/profiling/convert_excel2csv.py path/to/your.xlsx
+python utils/convert_excel2csv.py path/to/your.xlsx
 ```
 
 ### Cross-Entity Validation
@@ -87,13 +78,13 @@ python src/profiling/convert_excel2csv.py path/to/your.xlsx
 To compare data across multiple entities:
 
 ```bash
-python src/cross_entity/base/cross_entity_validation.py
+python scripts/cross-entity/cross_entity_validation.py
 ```
 
 For PII-aware cross-entity validation:
 
 ```bash
-python src/cross_entity/pii_aware/PII_aware_cross_entity_validation.py
+python scripts/cross-entity/PII_aware_cross_entity_validation.py
 ```
 
 ### Generating Dummy Data
@@ -101,7 +92,7 @@ python src/cross_entity/pii_aware/PII_aware_cross_entity_validation.py
 To generate dummy customer data:
 
 ```bash
-python src/profiling/customer_data/CustomerDataIndividual.py --count 100
+python scripts/generate-dummy-data/CustomerDataIndividual.py --count 100
 ```
 
 ### Data Validation
@@ -109,25 +100,26 @@ python src/profiling/customer_data/CustomerDataIndividual.py --count 100
 To validate specific fields against patterns:
 
 ```bash
-python src/utils/validity.py path/to/data.csv
+python scripts/validity_of_national_ids.py path/to/data.csv
 ```
+
+The validation includes checks for:
+- Nigerian NIN (11 digits)
+- BVN (11 digits starting with 22)
+- Nigerian passport numbers
+- Driver's license numbers
 
 ### Interactive Visualization
 
 Launch the Streamlit app for interactive data exploration:
 
 ```bash
-streamlit run src/streamlit/app2.py
+streamlit run streamlit/app2.py
 ```
 
 ## Handling Sensitive Data
 
-This project includes utilities for hashing sensitive identifiers like BVNs, NINs, and other PII:
-
-```bash
-cd src/hashing
-./hash-ids.sh path/to/ids_file
-```
+This project includes utilities for hashing sensitive identifiers like BVNs, NINs, and other PII in the `scripts/hashing/` directory.
 
 ## Contributing
 
@@ -139,4 +131,4 @@ cd src/hashing
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
