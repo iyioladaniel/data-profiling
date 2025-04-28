@@ -7,3 +7,7 @@
 *.json
 *.txt
 *checksum*
+*__pycache__
+*.egg-info
+*.egg
+*.pyc
