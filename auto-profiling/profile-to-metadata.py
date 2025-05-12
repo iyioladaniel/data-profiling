@@ -165,6 +165,28 @@ def _process_dataset(data, source_name, table_name, schema_name, sensitive_colum
     # Store the total record count
     total_records = len(data)
     
+    # # Clean data types to prevent ufunc errors
+    # try:
+    #     # Handle problematic numeric columns by forcing conversion where needed
+    #     for col in data.columns:
+    #         # Check if column contains numeric values
+    #         if data[col].dtype == 'object':
+    #             # Try to convert string columns to numeric if they appear to be numeric
+    #             try:
+    #                 # First attempt to convert to numeric, coercing errors to NaN
+    #                 numeric_data = pd.to_numeric(data[col], errors='coerce')
+                    
+    #                 # If most values converted successfully (less than 10% NaN), use the converted column
+    #                 if numeric_data.isna().mean() < 0.1:  # Less than 10% NaN values
+    #                     data[col] = numeric_data
+    #                     logging.debug(f"Converted column '{col}' to numeric type")
+    #             except Exception as e:
+    #                 logging.debug(f"Cannot convert column '{col}' to numeric: {e}")
+        
+    #     logging.info("Data types cleaned successfully")
+    # except Exception as e:
+    #     logging.warning(f"Error during data type cleaning: {e}")
+    
     # Automatically detect sensitive columns if not provided
     if sensitive_columns is None:
         sensitive_columns = [
@@ -207,9 +229,9 @@ def _process_dataset(data, source_name, table_name, schema_name, sensitive_colum
     variables_df['last_updated'] = pd.Timestamp.now()
     
     # Calculate completeness percentage
-    if 'count' in variables_df.columns and 'n_missing' in variables_df.columns:
-        variables_df['completeness_pct'] = ((variables_df['count'] - variables_df['n_missing']) / 
-                                         variables_df['count'] * 100).round(2)
+    # if 'count' in variables_df.columns and 'n_missing' in variables_df.columns:
+    #     variables_df['completeness_pct'] = ((variables_df['count'] - variables_df['n_missing']) / 
+    #                                      variables_df['count'] * 100).round(2)
     
     # Mark sensitive columns in the metadata
     variables_df['is_sensitive'] = variables_df['column_name'].isin(sensitive_columns)
@@ -353,9 +375,10 @@ def generate_metadata_file(var_df: pd.DataFrame, output_path: str = None) -> pd.
             metadata_df.rename(columns=rename_cols, inplace=True)
         
         # Ensure these columns are included at the beginning
-        priority_cols = ['schema_name', 'table_name', 'column_name', 'data_type', 
-                        'total_records', 'total_count', 'missing_count', 
-                        'completeness_pct', 'is_sensitive',
+        priority_cols = ['schema_name', 'table_name', 'column_name', 'data_type', 'is_sensitive',
+                        'total_records', 'total_count', 'missing_count', 'completeness_pct',
+                        'is_unique', 'unique_count', 'unique_percentage', 'distinct_count', 'distinct_percentage',
+                        'category_count',  
                         # Add database dictionary columns
                         'position', 'data_length', 'data_precision', 'data_scale',
                         'nullable', 'required', 'comments',
@@ -368,9 +391,9 @@ def generate_metadata_file(var_df: pd.DataFrame, output_path: str = None) -> pd.
                 all_cols.append(col)
                 
         # Add remaining columns
-        for col in metadata_df.columns:
-            if col not in all_cols:
-                all_cols.append(col)
+        # for col in metadata_df.columns:
+        #     if col not in all_cols:
+        #         all_cols.append(col)
                 
         # Reorder columns
         metadata_df = metadata_df[all_cols]
