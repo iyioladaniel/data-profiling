@@ -6,11 +6,29 @@ import pandas as pd
 import hashlib
 import json
 import getpass
-import oracledb
 from dotenv import load_dotenv
+from clickhouse_driver import Client # CHANGED: Import the clickhouse driver Client
 import logging
 import sys
 from datetime import datetime
+
+# --- Configuration Paths ---
+# Calculate the path to the script's directory and the project root
+script_dir = os.path.dirname(__file__)
+project_root = os.path.join(script_dir, '..')
+
+# Calculate the path to the table list file relative to the project root
+tables_path = os.path.join(project_root, 'scripts', 'flex11_table_list.txt') # Renamed to match usage in main block
+
+# Calculate the path to the output directory relative to the project root
+metadata_dir = os.path.join(project_root, 'metadata_profile')
+
+# Load environment variables from the specified secrets file
+secrets_path = os.path.join(project_root, 'env', 'clickh_secrets.env')
+
+# Load environment variables from the .env file
+# Use override=True to ensure variables in this file take precedence if they exist elsewhere
+load_dotenv(dotenv_path=secrets_path, override=True)
 
 def setup_logging(log_level=logging.INFO, log_file=None):
     """
@@ -47,18 +65,36 @@ def setup_logging(log_level=logging.INFO, log_file=None):
     logging.debug(f"Python version: {sys.version}")
     logging.debug(f"Script started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-def connect_to_oracle(db_user: str, db_password: str, db_host: str, db_port, db_sid) -> None:
-    try: 
-        with oracledb.connect(user=db_user, password=db_password, dsn=oracledb.makedsn(db_host, db_port, db_sid)) as connection:
-            with connection.cursor() as cursor:
-                sql = """select sysdate from dual"""
-                for r in cursor.execute(sql):
-                    logging.info(f"Database connection successful. Current date: {r}")
-    except oracledb.DatabaseError as e:
-        error, = e.args
-        logging.error(f"Oracle error code: {error.code}")
-        logging.error(f"Oracle error message: {error.message}")
-    return None
+def connect_to_clickhouse(host: str, port: int, user: str, password: str): # Removed database parameter from function signature
+    """
+    Connect to ClickHouse database (using default database).
+
+    Args:
+        host (str): ClickHouse host address
+        port (int): ClickHouse port
+        user (str): ClickHouse username
+        password (str): ClickHouse password
+        # Removed database parameter from docstring as it's not compulsory for connection
+
+    Returns:
+        clickhouse_driver.Client: ClickHouse client connection object, or None if connection fails
+    """
+    try:
+        # Use the Client object for connection
+        client = Client(
+            host=host,
+            port=port,
+            user=user,
+            password=password
+            # Removed database parameter from Client constructor
+        )
+        # Test the connection by executing a simple query
+        client.execute('SELECT 1')
+        logging.info(f"Successfully connected to ClickHouse at {host}:{port}")
+        return client # Return the client object on success
+    except Exception as e:
+        logging.error(f"Error connecting to ClickHouse: {e}") 
+        return None
 
 def get_list_of_tables(path_to_file: str) -> list:
     """
@@ -71,13 +107,15 @@ def get_list_of_tables(path_to_file: str) -> list:
         list: List of table names
     """
     try:
+        # Ensure the file path is valid
+        if not os.path.exists(path_to_file):
+             logging.error(f"Error: Table list file not found at the path '{path_to_file}'. Please check the path and try again.") # CHANGED: Replaced print with logging.error
+             return []
+        
         with open(path_to_file, 'r') as file:
-            tables = [line.strip() for line in file.readlines()]
+            tables = [line.strip() for line in file.readlines() if line.strip()]
         logging.info(f"Successfully loaded {len(tables)} tables from {path_to_file}")
         return tables
-    except FileNotFoundError:
-        logging.error(f"File not found at the path '{path_to_file}'. Please check the path and try again.")
-        return []
     except Exception as e:
         logging.error(f"An unexpected error occurred while reading tables file: {e}")
         return []
@@ -85,22 +123,20 @@ def get_list_of_tables(path_to_file: str) -> list:
 def hash_column(column: pd.Series) -> pd.Series:
     """Hash the values in a column using SHA-256."""
     return column.apply(lambda x: hashlib.sha256(str(x).encode()).hexdigest() if pd.notnull(x) else x)
-
-def generate_profiling_report(db_connection=None, schema=None, tables_list=None, path_to_csv=None, 
-                             sensitive_columns=None, sensitive_keywords=None) -> pd.DataFrame:
+    
+def generate_profiling_report(db_connection: Client, tables_list: list, 
+                              sensitive_columns=None, sensitive_keywords=None) -> pd.DataFrame:
     """
-    Generate a profiling report using ydata-profiling for either CSV files or Oracle database tables
+    Generate a profiling report using ydata-profiling for Clickhouse database tables
     
     Args:
-        db_connection (oracledb.Connection, optional): Connection to Oracle database
-        schema (str, optional): Schema name for Oracle tables
-        tables_list (list, optional): List of tables to profile
-        path_to_csv (str, optional): Path to CSV file (if not using database)
-        sensitive_columns (list, optional): List of column names to mark as sensitive
-        sensitive_keywords (list, optional): Keywords to detect sensitive columns
+        db_connection (clickhouse_driver.Client): Connected ClickHouse client object. 
+        tables_list (list): List of table names. # CHANGED: Updated docstring
+        sensitive_columns (list, optional): List of column names to mark as sensitive.
+        sensitive_keywords (list, optional): Keywords to detect sensitive columns.
         
     Returns:
-        DataFrame: DataFrame with profiling information including completeness metrics
+        DataFrame: DataFrame with profiling information
     """
     # Default sensitive keywords if not provided
     if sensitive_keywords is None:
@@ -109,166 +145,139 @@ def generate_profiling_report(db_connection=None, schema=None, tables_list=None,
     
     results_dfs = []  # To store results from multiple tables
     
+    # Check to ensure db_connection is a Client object
+    if not isinstance(db_connection, Client):
+        logging.error("Error: Invalid database connection object provided to generate_profiling_report. Expected clickhouse_driver.Client.") # CHANGED: Replaced print with logging.error
+        return pd.DataFrame()
+    
     try:
-        # Determine source type (CSV or database)
-        if path_to_csv:
-            # Process CSV file
-            file_name = str.split(path_to_csv, "/")[-1].split(".")[0]
-            logging.info(f"Reading CSV file: {path_to_csv}")
-            data = pd.read_csv(path_to_csv)
-            logging.info(f"CSV file loaded with {len(data)} records and {len(data.columns)} columns")
-            source_name = file_name
-            table_name = file_name
-            schema_name = None
-            
-            # Process single CSV
-            result_df = _process_dataset(data, source_name, table_name, schema_name, 
-                               sensitive_columns, sensitive_keywords)
-            results_dfs.append(result_df)
-            
-        elif db_connection and tables_list:
-            # Process Oracle tables
-            for table in tables_list:
+        if db_connection and tables_list:
+            # Process Clickhouse tables
+           for table_name in tables_list: # Iterate directly over table names
                 try:
-                    logging.info(f"Processing table: {schema}.{table}")
-                    query = f"SELECT * FROM {schema}.{table}"
-                    data = pd.read_sql(query, db_connection)
+                    full_table_name = table_name # Use table_name directly
+                    db_name = db_connection.database # Get the database name from the client object (will be default if not specified)
+
+                    logging.info(f"Processing table: {full_table_name}")
+
+                    # Construct the SQL query for ClickHouse
+                    # This query uses the table_name, relying on the default database connection
+                    query = f"SELECT * FROM {table_name}" # Use table_name directly in query
+
+                    # Execute query using clickhouse_driver.Client.execute()
+                    # execute returns a list of tuples, need to get column names separately
+                    data_tuples = db_connection.execute(query) # Using client.execute()
+
+                    # Get column names from the table description using client.execute()
+                    column_names = [col[0] for col in db_connection.execute(f"DESCRIBE TABLE {table_name}")] # CHANGED: Use table_name in DESCRIBE TABLE query
+
+                    # Create pandas DataFrame
+                    data = pd.DataFrame(data_tuples, columns=column_names)
                     
                     # For empty tables
                     if data.empty:
-                        logging.warning(f"Table {schema}.{table} is empty. Skipping.")
+                        logging.warning(f"Table {full_table_name} is empty. Skipping.")
                         continue
                     
-                    result_df = _process_dataset(data, f"{schema}.{table}", table, schema,
-                               sensitive_columns, sensitive_keywords, connection=db_connection)
+                    result_df = _process_dataset(data, full_table_name, table_name, db_name, # CHANGED: Pass db_name
+                                               sensitive_columns, sensitive_keywords)
                     results_dfs.append(result_df)
-                    
+
                 except Exception as e:
-                    logging.error(f"Error processing table {schema}.{table}: {e}")
-        else:
-            logging.error("Error: Either provide path_to_csv or both db_connection and tables_list")
+                    logging.error(f"Error processing table {full_table_name}: {e}")
+        else: # This covers cases where db_connection or tables_list are missing
+            logging.error("Error: db_connection and tables_list must be provided for database profiling.") # CHANGED: Updated error message and used logging.error
             return pd.DataFrame()
-        
+
         # Combine all results
         if results_dfs:
-            combined_df = pd.concat(results_dfs)
+            # Use ignore_index=True to reset index when concatenating
+            combined_df = pd.concat(results_dfs, ignore_index=True)
             return combined_df
         else:
             return pd.DataFrame()
-        
+
     except Exception as e:
-        logging.error(f"An unexpected error occurred in generate_profiling_report: {e}")
+        logging.error(f"An unexpected error occurred in generate_profiling_report: {e}") # CHANGED: Replaced print with logging.error
         return pd.DataFrame()
 
-def _process_dataset(data, source_name, table_name, schema_name, sensitive_columns, sensitive_keywords, connection=None):
-    """Helper function to process a single dataset (CSV or DB table)"""
+def _process_dataset(data, source_name, table_name, schema_name, sensitive_columns, sensitive_keywords):
+    """Helper function to process a single dataset (DB table)"""
     # Store the total record count
     total_records = len(data)
-    
-    # # Clean data types to prevent ufunc errors
-    # try:
-    #     # Handle problematic numeric columns by forcing conversion where needed
-    #     for col in data.columns:
-    #         # Check if column contains numeric values
-    #         if data[col].dtype == 'object':
-    #             # Try to convert string columns to numeric if they appear to be numeric
-    #             try:
-    #                 # First attempt to convert to numeric, coercing errors to NaN
-    #                 numeric_data = pd.to_numeric(data[col], errors='coerce')
-                    
-    #                 # If most values converted successfully (less than 10% NaN), use the converted column
-    #                 if numeric_data.isna().mean() < 0.1:  # Less than 10% NaN values
-    #                     data[col] = numeric_data
-    #                     logging.debug(f"Converted column '{col}' to numeric type")
-    #             except Exception as e:
-    #                 logging.debug(f"Cannot convert column '{col}' to numeric: {e}")
-        
-    #     logging.info("Data types cleaned successfully")
-    # except Exception as e:
-    #     logging.warning(f"Error during data type cleaning: {e}")
-    
+
     # Automatically detect sensitive columns if not provided
     if sensitive_columns is None:
         sensitive_columns = [
-            col for col in data.columns 
+            col for col in data.columns
             if any(keyword in col.lower() for keyword in sensitive_keywords)
         ]
-    
+
     # Hash sensitive columns
     if sensitive_columns:
         for col in sensitive_columns:
             if col in data.columns:
-                logging.info(f"Hashing sensitive column: {col}")
+                logging.info(f"Hashing sensitive column: {col}") # CHANGED: Replaced print with logging.info
                 data[col] = hash_column(data[col])
-    
+
     # Configure settings to mark sensitive columns
     config = Settings()
     if sensitive_columns:
-        config.variables.descriptions = {col: "Sensitive Data (Hashed)" 
-                                       for col in sensitive_columns 
+        config.variables.descriptions = {col: "Sensitive Data (Hashed)"
+                                       for col in sensitive_columns
                                        if col in data.columns}
-    
-    # Generate profiling report    
+
+    # Generate profiling report
+    # Suppress the default HTML report generation if only JSON is needed
     profile = ProfileReport(
         data,
         title=f"{source_name} Profiling Report",
         explorative=True,
-        config=config)
-    
+        config=config,
+        # Set to False if you only need the JSON output for metadata
+        # to_file=None
+        )
+
     # Get JSON data and extract variables data
-    json_data = profile.to_json()
-    variables_data = json.loads(json_data)['variables']
+    # Use to_json() directly if to_file is None
+    json_data_str = profile.to_json()
+    json_data = json.loads(json_data_str)
+
+    # Check if 'variables' key exists before accessing it
+    if 'variables' not in json_data:
+        logging.warning(f"Warning: 'variables' key not found in profiling report JSON for {source_name}. Skipping metadata extraction.") # CHANGED: Replaced print with logging.warning
+        return pd.DataFrame() # Return empty DataFrame if no variable data
+
+    variables_data = json_data['variables']
     variables_df = pd.DataFrame(variables_data).transpose()
     variables_df = variables_df.reset_index().rename(columns={'index': 'column_name'})
-    
+
     # Add metadata enrichment
     variables_df['table_name'] = table_name
-    variables_df['schema_name'] = schema_name
+    variables_df['schema_name'] = schema_name # This will be the database name for ClickHouse
     variables_df['total_records'] = total_records
     variables_df['created_at'] = pd.Timestamp.now()
     variables_df['last_updated'] = pd.Timestamp.now()
-    
+
     # Calculate completeness percentage
-    # if 'count' in variables_df.columns and 'n_missing' in variables_df.columns:
-    #     variables_df['completeness_pct'] = ((variables_df['count'] - variables_df['n_missing']) / 
-    #                                      variables_df['count'] * 100).round(2)
-    
+    # Ensure columns exist before calculating
+    if 'count' in variables_df.columns and 'n_missing' in variables_df.columns:
+        # Avoid division by zero if count is 0
+        variables_df['completeness_pct'] = variables_df.apply(
+            lambda row: ((row['count'] - row['n_missing']) / row['count'] * 100).round(2) if row['count'] > 0 else 0,
+            axis=1
+        )
+    else:
+         variables_df['completeness_pct'] = 0 # Default to 0 if columns are missing
+
+
     # Mark sensitive columns in the metadata
     variables_df['is_sensitive'] = variables_df['column_name'].isin(sensitive_columns)
-    
-    logging.info(f"Successfully generated profile for {source_name} with {len(variables_df)} columns")
-    
-    # Enrich with database metadata if connection available
-    if connection and schema_name and table_name:
-        try:
-            logging.info(f"Retrieving database metadata for {schema_name}.{table_name}")
-            db_metadata = get_column_metadata(connection, schema_name, table_name)
-            
-            if not db_metadata.empty:
-                # Convert column names to lowercase for joining
-                variables_df['column_name_lower'] = variables_df['column_name'].str.lower()
-                db_metadata['db_column_name_lower'] = db_metadata['db_column_name'].str.lower()
-                
-                # Merge the dataframes on column name (case-insensitive)
-                variables_df = pd.merge(
-                    variables_df, 
-                    db_metadata,
-                    how='left',
-                    left_on='column_name_lower',
-                    right_on='db_column_name_lower'
-                )
-                
-                # Remove the temporary columns used for joining
-                variables_df = variables_df.drop(['column_name_lower', 'db_column_name_lower', 'db_column_name'], axis=1, errors='ignore')
-                
-                logging.info(f"Added database metadata for {len(db_metadata)} columns")
-            else:
-                logging.warning("No database dictionary metadata found")
-        except Exception as e:
-            logging.warning(f"Failed to enrich with database metadata: {e}")
-            
-    return variables_df
 
+    logging.info(f"Successfully generated profile for {source_name} with {len(variables_df)} columns")
+
+    return variables_df
+'''
 def get_column_metadata(connection, schema, table):
     """
     Get additional metadata from Oracle data dictionary
@@ -323,39 +332,49 @@ def get_column_metadata(connection, schema, table):
     except Exception as e:
         logging.error(f"Error retrieving database metadata: {e}")
         return pd.DataFrame()
+'''
 
-def generate_metadata_file(var_df: pd.DataFrame, output_path: str = None) -> pd.DataFrame:
+def generate_metadata_file(var_df: pd.DataFrame, output_dir: str) -> pd.DataFrame:
     """
-    Generate a metadata file from the profiling report.
+    Generate a metadata file from the profiling report and save it to a specified directory.
     If the file exists, checks for duplicates and appends only new records.
-    
+
     Args:
         var_df (DataFrame): DataFrame with profiling information
-        output_path (str, optional): Path to save the metadata file
-    
+        output_dir (str): Path to the directory to save the metadata file # CHANGED: Parameter name changed to output_dir
+
     Returns:
         DataFrame: The processed metadata DataFrame that was saved
     """
     try:
+        # Create the output directory if it doesn't exist
+        # os.makedirs(output_dir, exist_ok=True)
+
         # Create a copy to avoid modifying the original DataFrame
         metadata_df = var_df.copy()
-        
-        # Set default filename based on schema and table if available
-        if output_path is None:
-            if 'schema_name' in metadata_df.columns and 'table_name' in metadata_df.columns:
-                # Use first row's schema and table (assuming all rows are for same table)
-                schema = metadata_df['schema_name'].iloc[0]
-                table = metadata_df['table_name'].iloc[0]
-                if schema and table:
-                    output_path = f"{schema}_{table}_metadata.csv"
-                else:
-                    output_path = "metadata_report.csv"
-            else:
-                output_path = "metadata_report.csv"
-        
+
+        # Determine the filename based on table name
+        # Ensure metadata_df is not empty and has the required columns
+        if metadata_df.empty or 'table_name' not in metadata_df.columns:
+             logging.error("Error: Metadata DataFrame is empty or missing required column ('table_name'). Cannot determine filename.") 
+             return pd.DataFrame() # Return empty DataFrame if essential info is missing
+
+        # Use first row's schema and table (assuming all rows are for same table for a single file)
+        # CHANGED: Removed schema retrieval
+        table = metadata_df['table_name'].iloc[0]
+        # CHANGED: Check only for table
+        if not table:
+             logging.error("Error: Table name is missing in the metadata. Cannot determine filename.") # CHANGED: Replaced print with logging.error
+             return pd.DataFrame()
+
+        # Construct the full output file path within the output directory
+        # Construct filename using only table name
+        output_filename = f"{table}_metadata.csv"
+        output_path = os.path.join(output_dir, output_filename) # Construct full path using output_dir
+
         logging.info(f"Preparing metadata file: {output_path}")
-        
-        # Rename columns if they have their original names
+
+        # Rename columns if they have their original names (unchanged from previous versions)
         rename_map = {
             'n_distinct': 'distinct_count',
             'p_distinct': 'distinct_percentage',
@@ -368,144 +387,118 @@ def generate_metadata_file(var_df: pd.DataFrame, output_path: str = None) -> pd.
             'p_missing': 'missing_percentage',
             'n_category': 'category_count'
         }
-        
+
         # Only rename columns that exist and haven't been renamed yet
         rename_cols = {k: v for k, v in rename_map.items() if k in metadata_df.columns and v not in metadata_df.columns}
         if rename_cols:
             metadata_df.rename(columns=rename_cols, inplace=True)
-        
-        # Ensure these columns are included at the beginning
-        priority_cols = ['schema_name', 'table_name', 'column_name', 'data_type', 'is_sensitive',
-                        'total_records', 'total_count', 'missing_count', 'completeness_pct',
-                        'is_unique', 'unique_count', 'unique_percentage', 'distinct_count', 'distinct_percentage',
-                        'category_count',  
-                        # Add database dictionary columns
-                        'position', 'data_length', 'data_precision', 'data_scale',
-                        'nullable', 'required', 'comments',
+
+        # Ensure these columns are included at the beginning (unchanged from previous versions)
+        priority_cols = ['schema_name', 'table_name', 'column_name', 'data_type',
+                        'total_records', 'total_count', 'missing_count',
+                        'completeness_pct', 'is_sensitive',
                         'created_at', 'last_updated']
-        
+
         # Create a list of all columns with priority columns first
         all_cols = []
         for col in priority_cols:
             if col in metadata_df.columns:
                 all_cols.append(col)
-                
+
         # Add remaining columns
-        # for col in metadata_df.columns:
-        #     if col not in all_cols:
-        #         all_cols.append(col)
-                
-        # Reorder columns
+        for col in metadata_df.columns:
+            if col not in all_cols:
+                all_cols.append(col)
+
+        # Reorder columns, handling cases where some priority columns might be missing
+        # Ensure all_cols only contains columns actually present in metadata_df
+        all_cols = [col for col in all_cols if col in metadata_df.columns]
         metadata_df = metadata_df[all_cols]
-        
-        # Check if file exists and handle append logic
+
+
+        # Check if file exists and handle append logic (unchanged from previous versions)
         if os.path.exists(output_path):
             logging.info(f"Metadata file {output_path} already exists. Checking for new records...")
             # Read existing metadata
             existing_df = pd.read_csv(output_path)
-            
+
             # Define key columns for identifying duplicates
-            # A row is considered a duplicate if schema, table, and column name match
             key_columns = ['schema_name', 'table_name', 'column_name']
+            # Filter key_columns to only include those present in *both* dataframes
             key_columns = [col for col in key_columns if col in metadata_df.columns and col in existing_df.columns]
-            
-            if key_columns:  # Only proceed with duplicate check if we have key columns
-                # Filter out rows that already exist in the file
-                # Create a set of tuples with the key values from existing data
+
+
+            if key_columns:
                 existing_keys = set(
                     tuple(row) for row in existing_df[key_columns].itertuples(index=False, name=None)
                 )
-                
-                # Filter new data to only include rows with new keys
+
                 new_data_mask = ~metadata_df.apply(
-                    lambda row: tuple(row[key_columns]) in existing_keys, axis=1
+                    lambda row: tuple(row[[col for col in key_columns if col in metadata_df.columns]]) in existing_keys, axis=1
                 )
-                
-                # If we have any new data, append it
+
                 if new_data_mask.any():
-                    metadata_df = metadata_df[new_data_mask]
-                    # Append new data to existing file
-                    metadata_df.to_csv(output_path, mode='a', header=False, index=False)
-                    logging.info(f"Appended {new_data_mask.sum()} new records to {output_path}")
+                    new_records_df = metadata_df[new_data_mask]
+                    new_records_df.to_csv(output_path, mode='a', header=False, index=False)
+                    logging.info(f"Appended {new_data_mask.sum()} new records to {output_path}") 
+                    metadata_df = pd.concat([existing_df, new_records_df], ignore_index=True)
                 else:
                     logging.info(f"No new records to append to {output_path}")
-                    
-                # Combine for return value
-                metadata_df = pd.concat([existing_df, metadata_df])
+                    metadata_df = existing_df
+
             else:
-                # If we can't determine duplicates, append all (might cause duplicates)
                 metadata_df.to_csv(output_path, mode='a', header=False, index=False)
                 logging.warning(f"Appended all records to {output_path} (duplicate checking unavailable)")
-                
+                metadata_df = pd.read_csv(output_path)
+
         else:
             # File doesn't exist, create new
             metadata_df.to_csv(output_path, index=False)
-            logging.info(f"Created new metadata file at {output_path}")
-        
+            logging.info(f"Created new metadata file at {output_path}") # CHANGED: Replaced print with logging.info
+
         return metadata_df
-        
+
     except Exception as e:
-        logging.error(f"An error occurred while generating the metadata file: {e}")
+        logging.error(f"An error occurred while generating the metadata file: {e}") # CHANGED: Replaced print with logging.error
         return var_df  # Return original DataFrame if we encounter an error
 
-def main():
-    # Set up argument parser with description
+# Example Usage:
+if __name__ == "__main__":
+    # CHANGED: Added argument parsing for log file and log level
+    # import argparse # Already imported above
     parser = argparse.ArgumentParser(
-        description="Generate data profiling reports and metadata for CSV files or Oracle database tables."
+        description="Generate data profiling reports and metadata for ClickHouse database tables."
     )
-    
-    # Create mutually exclusive group for data source (either CSV or DB)
-    source_group = parser.add_mutually_exclusive_group(required=True)
-    
-    # CSV file option
-    source_group.add_argument(
-        '--csv', 
-        type=str, 
-        help="Path to CSV file to profile"
-    )
-    
-    # Database connection options
-    source_group.add_argument(
-        '--db',
-        action='store_true',
-        help="Use Oracle database connection instead of CSV"
-    )
-    
-    # Database specific arguments
-    db_group = parser.add_argument_group('Database options', 'Options for Oracle database connection')
-    db_group.add_argument(
-        '--schema',
-        type=str,
-        help="Oracle schema name (required with --db)"
-    )
-    db_group.add_argument(
+
+    # Added ClickHouse specific arguments if needed (currently using env vars)
+    # parser.add_argument('--ch_host', type=str, help='ClickHouse host')
+    # parser.add_argument('--ch_port', type=int, help='ClickHouse port')
+    # parser.add_argument('--ch_user', type=str, help='ClickHouse user')
+    # parser.add_argument('--ch_password', type=str, help='ClickHouse password')
+    # parser.add_argument('--ch_database', type=str, help='ClickHouse database') # If not using default
+
+    parser.add_argument(
         '--tables_file',
         type=str,
+        default=tables_path, # Set default to the calculated path
         help="Path to file containing table names to profile (one per line)"
     )
-    db_group.add_argument(
+
+    parser.add_argument(
+        '--output_dir', # Changed argument name to output_dir
+        type=str,
+        default=metadata_dir, # Set default to the calculated path
+        help="Path to the directory to save metadata files"
+    )
+
+    parser.add_argument(
         '--env_file',
         type=str,
-        default='.env',
+        default=secrets_path, # Set default to the calculated secrets path
         help="Path to .env file with database credentials"
     )
-    db_group.add_argument(  # Add thick mode option
-        '--thick',
-        action='store_true',
-        help="Use Oracle thick mode client instead of thin mode"
-    )
-    
-    # Additional options
-    parser.add_argument(
-        '--output',
-        type=str,
-        help="Path to save metadata file (default based on input source)"
-    )
-    parser.add_argument(
-        '--no_hash',
-        action='store_true',
-        help="Skip sensitive data hashing"
-    )
+
+    # Added logging arguments
     parser.add_argument(
         '--log_file',
         type=str,
@@ -518,117 +511,112 @@ def main():
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
         help="Logging level (default: INFO)"
     )
-    
-    # Parse arguments
+
+    # Removed sensitive column arguments from argparse if handled by env vars
+
     args = parser.parse_args()
-    
-    # Set up logging
+
+    # Set up logging based on parsed arguments
     log_level = getattr(logging, args.log_level.upper())
-    setup_logging(log_level=log_level, log_file=args.log_file)
-    
-    # Process based on source type
-    if args.csv:
-        # CSV path provided
-        logging.info(f"Profiling CSV file: {args.csv}")
-        df = generate_profiling_report(path_to_csv=args.csv)
-        
-        if df.empty:
-            logging.error("Failed to generate profiling report.")
-            return 1
-        
-        # Generate metadata file
-        if args.output:
-            generate_metadata_file(df, args.output)
-        else:
-            generate_metadata_file(df)
-        
-    elif args.db:
-        # Database connection requested
-        if not args.schema:
-            logging.error("--schema is required when using --db")
-            return 1
-        
-        if not args.tables_file:
-            logging.error("--tables_file is required when using --db")
-            return 1
-            
-        # Load environment variables for DB connection
-        load_dotenv(args.env_file)
-        
-        # Get database credentials from environment variables
-        db_user = os.getenv('DB_USER')
-        db_password = os.getenv('DB_PASSWORD')
-        db_host = os.getenv('DB_HOST')
-        db_port = os.getenv('DB_PORT')
-        db_sid = os.getenv('DB_SID')
-        
-        # Check for missing credentials
-        if not all([db_user, db_password, db_host, db_port, db_sid]):
-            logging.error("Missing database credentials in environment variables.")
-            logging.error("Required: DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_SID")
-            return 1
-        
-        # Connect to Oracle
+    setup_logging(log_level=log_level, log_file=args.log_file) # CHANGED: Call setup_logging
+
+    # --- ClickHouse Connection Details ---
+    # Read credentials from environment variables loaded from the secrets file
+    # Assuming secrets file uses variable names: host, port, user, password, database
+    ch_host = os.getenv('host')
+    # Read port as string first using the same variable name
+    ch_port = os.getenv('port') # Keep as string initially for robust check
+    ch_user = os.getenv('user')
+    ch_password = os.getenv('password')
+    # Removed ch_database retrieval as it's not used for connection
+
+    # Convert port to integer, handle potential errors
+    # Port must be provided and be a valid integer
+    ch_port = None # Initialize as None
+    if ch_port is None:
+        logging.error("Error: ClickHouse port ('port') not found in environment variables loaded from the secrets file.")
+        exit(1) # Exit if port is not set
+    else:
         try:
-            # Initialize Oracle thick client if requested
-            if args.thick:
-                logging.info("Using Oracle thick mode client...")
-                try:
-                    oracledb.init_oracle_client()
-                    logging.info("Oracle thick client initialized successfully")
-                except Exception as e:
-                    logging.warning(f"Failed to initialize Oracle thick client: {e}")
-                    logging.info("Falling back to thin mode...")
-            
-            # Connect to database
-            connection = oracledb.connect(
-                user=db_user,
-                password=db_password,
-                dsn=oracledb.makedsn(db_host, db_port, db_sid)
+            ch_port = int(ch_port) # Convert the string to an integer
+        except ValueError:
+            logging.error(f"Error: Invalid port value '{ch_port}' in secrets file. Port must be an integer.")
+            exit(1) # Exit if port is invalid
+
+
+    # 1. Validate essential configuration
+    # Check for connection details and required file paths
+    # Check if ch_port is not None (it will be None only if os.getenv('port') returned None)
+    if not all([ch_host, ch_port is not None, ch_user, ch_password]):
+        logging.error("Error: Essential ClickHouse connection details (host, port, user, password) not found or invalid in environment variables loaded from the secrets file.") # CHANGED: Replaced print with logging.error
+        # Print the original string value of port if available, for better error message
+        logging.error(f"Host: {ch_host}, Port: {os.getenv('port')}, User: {ch_user}")
+        exit(1) # Exit if essential connection details is missing
+
+    # Check if the calculated paths for inputs/outputs seem valid
+    # Use args.tables_file which is set by argparse (defaulting to tables_path)
+    if not os.path.exists(args.tables_file):
+        logging.error(f"Error: Table list file path does not exist: {args.tables_file}")
+        exit(1)
+
+    # We don't need to check if metadata_dir exists here, generate_metadata_file creates it.
+    # But ensure the variable isn't empty
+    # CHANGED: Use args.output_dir which is set by argparse (defaulting to metadata_dir)
+    if not args.output_dir:
+         logging.error("Error: Calculated metadata output directory path is empty.")
+         exit(1)
+    # CHANGED: Added check to create the output directory if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
+    logging.info(f"Ensured output directory exists: {args.output_dir}")
+
+
+    # 2. Connect to ClickHouse
+    # Pass all connection details, excluding the database name
+    # CHANGED: Removed ch_database from the connection function call
+    ch_client = connect_to_clickhouse(
+        host=ch_host,
+        port=ch_port, # Pass the integer port
+        user=ch_user,
+        password=ch_password
+    )
+
+
+    if ch_client: # This condition now correctly checks if a Client object was returned
+        # 3. Get list of tables from the file
+        # Use the calculated TABLES_FILE_PATH
+        # CHANGED: Use args.tables_file
+        tables_to_profile = get_list_of_tables(args.tables_file)
+
+        if tables_to_profile:
+            # 4. Generate profiling report for ClickHouse tables
+            # Pass db_connection (the Client object) and tables_list
+            profiling_results_df = generate_profiling_report(
+                db_connection=ch_client, # Pass the Client object
+                tables_list=tables_to_profile,
+                sensitive_columns=SPECIFIC_SENSITIVE_COLUMNS, # Use the list from env var or None
+                sensitive_keywords=SENSITIVE_KEYWORDS_LIST
             )
-            logging.info(f"Successfully connected to Oracle database ({db_host}:{db_port}/{db_sid})")
-            
-            # Get list of tables
-            tables = get_list_of_tables(args.tables_file)
-            if not tables:
-                logging.error("No tables found in the specified file.")
-                return 1
-                
-            logging.info(f"Found {len(tables)} tables to profile.")
-            
-            # Generate profiling report for database tables
-            df = generate_profiling_report(
-                db_connection=connection,
-                schema=args.schema,
-                tables_list=tables
-            )
-            
-            if df.empty:
-                logging.error("Failed to generate profiling report.")
-                return 1
-            
-            # Generate metadata file
-            if args.output:
-                generate_metadata_file(df, args.output)
+
+            # 5. Generate and save the metadata file to the specified directory
+            if not profiling_results_df.empty:
+                # Pass the calculated METADATA_OUTPUT_DIR
+                # Use args.output_dir
+                generate_metadata_file(profiling_results_df, output_dir=args.output_dir)
             else:
-                generate_metadata_file(df)
-                
-            # Close connection
-            connection.close()
-            
-        except oracledb.DatabaseError as e:
-            error, = e.args
-            logging.error(f"Oracle error code: {error.code}")
-            logging.error(f"Oracle error message: {error.message}")
-            return 1
+                logging.info("No profiling results to generate metadata file.")
+
+        else:
+            logging.info("No tables found in the specified file to profile.")
+
+        # Close the ClickHouse connection
+        # clickhouse-driver Client objects have a close() method
+        try:
+            ch_client.close() # Use the close() method for Client
+            logging.info("ClickHouse connection closed.")
         except Exception as e:
-            logging.error(f"Error establishing database connection: {e}")
-            return 1
-    
-    logging.info("Process completed successfully!")
-    return 0
+            logging.error(f"Error closing ClickHouse connection: {e}")
 
+    else:
+        logging.error("Failed to connect to ClickHouse. Cannot proceed with profiling.")
 
-if __name__ == "__main__":
-    exit_code = main()
-    exit(exit_code)
+    logging.info("Script finished.")
