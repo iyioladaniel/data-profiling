@@ -580,7 +580,7 @@ if __name__ == "__main__":
     # 1. Validate essential configuration
     # Check for connection details and required file paths
     # Check if ch_port is not None (it will be None only if os.getenv('port') returned None)
-    if not all([ch_host, ch_port is not None, ch_user, ch_password]):
+    if not all([ch_host, ch_port, ch_user, ch_password]):
         logging.error("Error: Essential ClickHouse connection details (host, port, user, password) not found or invalid in environment variables loaded from the secrets file.") # CHANGED: Replaced print with logging.error
         # Print the original string value of port if available, for better error message
         logging.error(f"Host: {ch_host}, Port: {os.getenv('port')}, User: {ch_user}")
@@ -588,7 +588,7 @@ if __name__ == "__main__":
 
     # Check if the calculated paths for inputs/outputs seem valid
     # Use args.tables_file which is set by argparse (defaulting to tables_path)
-    if not os.path.exists(args.tables_file):
+   if not os.path.exists(args.tables_file):
         logging.error(f"Error: Table list file path does not exist: {args.tables_file}")
         exit(1)
 
