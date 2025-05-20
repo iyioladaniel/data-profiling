@@ -26,6 +26,9 @@ metadata_dir = os.path.join(project_root, 'metadata_profile')
 # Load environment variables from the specified secrets file
 secrets_path = os.path.join(project_root, 'env', 'clickh_secrets.env')
 
+# Calculate path to the directory containing sensitive column names
+sensitive_col_path = os.path.join(project_root, 'scripts', 'sensitive_columns.txt') # currently does not exist, expecting function to return None
+
 # Load environment variables from the .env file
 # Use override=True to ensure variables in this file take precedence if they exist elsewhere
 load_dotenv(dotenv_path=secrets_path, override=True)
@@ -123,6 +126,36 @@ def get_list_of_tables(path_to_file: str) -> list:
 def hash_column(column: pd.Series) -> pd.Series:
     """Hash the values in a column using SHA-256."""
     return column.apply(lambda x: hashlib.sha256(str(x).encode()).hexdigest() if pd.notnull(x) else x)
+
+# Function to read sensitive columns from a file
+def get_list_sensitive_col(file_path: str) -> list | None:
+    """
+    Reads sensitive column names from a text file, one column name per line.
+
+    Args:
+        file_path (str): The path to the file containing sensitive column names.
+
+    Returns:
+        list: A list of sensitive column names if the file is found and readable.
+        None: If the file does not exist or an error occurs during reading.
+    """
+    try:
+        if not os.path.exists(file_path):
+            logging.info(f"Sensitive columns file not found at: {file_path}. Will use keyword detection as fallback.")
+            return None
+        
+        with open(file_path, 'r') as f:
+            columns = [line.strip() for line in f if line.strip()]
+        
+        if columns:
+            logging.info(f"Successfully loaded {len(columns)} sensitive columns from {file_path}.")
+            return columns
+        else:
+            logging.info(f"Sensitive columns file at {file_path} is empty. Will use keyword detection as fallback.")
+            return None
+    except Exception as e:
+        logging.error(f"Error reading sensitive columns file {file_path}: {e}. Will use keyword detection as fallback.")
+        return None
     
 def generate_profiling_report(db_connection: Client, tables_list: list, 
                               sensitive_columns=None, sensitive_keywords=None) -> pd.DataFrame:
@@ -132,7 +165,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,
     Args:
         db_connection (clickhouse_driver.Client): Connected ClickHouse client object. 
         tables_list (list): List of table names.
-        sensitive_columns (list, optional): List of column names to mark as sensitive.
+        sensitive_columns (list, optional): List of column names to mark as sensitive. Expected to return None for now and sensitive keywords will be used for detection
         sensitive_keywords (list, optional): Keywords to detect sensitive columns.
         
     Returns:
@@ -569,6 +602,14 @@ if __name__ == "__main__":
     os.makedirs(args.output_dir, exist_ok=True)
     logging.info(f"Ensured output directory exists: {args.output_dir}")
 
+    # --- Sensitive Column Handling ---
+    # Attempt to load sensitive columns from a file first
+    sensitive_cols_from_file = get_list_sensitive_col(sensitive_col_path)
+
+    # Define keywords for automatic detection (fallback)
+    sensitive_keyword_list = ["bvn", "id number", "nin", "passport", "driver",
+                                 "identificationnumber", "chn"]
+
 
     # 2. Connect to ClickHouse
     # Pass all connection details, excluding the database name
@@ -593,8 +634,8 @@ if __name__ == "__main__":
             profiling_results_df = generate_profiling_report(
                 db_connection=ch_client, # Pass the Client object
                 tables_list=tables_to_profile,
-                sensitive_columns=SPECIFIC_SENSITIVE_COLUMNS, # Use the list from env var or None
-                sensitive_keywords=SENSITIVE_KEYWORDS_LIST
+                sensitive_columns=sensitive_cols_from_file, # Expected to be a list from a file. However, this will be None for now
+                sensitive_keywords=sensitive_keyword_list # Use the keyword list for detection
             )
 
             # 5. Generate and save the metadata file to the specified directory
