@@ -7,7 +7,7 @@ import hashlib
 import json
 import getpass
 from dotenv import load_dotenv
-from clickhouse_driver import Client # CHANGED: Import the clickhouse driver Client
+from clickhouse_driver import Client 
 import logging
 import sys
 from datetime import datetime
@@ -83,7 +83,7 @@ def connect_to_clickhouse(host: str, port: int, user: str, password: str): # Rem
         # Use the Client object for connection
         client = Client(
             host=host,
-            port=port,
+            port=int(port), # Explicitly convert port to int here for the client
             user=user,
             password=password
             # Removed database parameter from Client constructor
@@ -131,7 +131,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,
     
     Args:
         db_connection (clickhouse_driver.Client): Connected ClickHouse client object. 
-        tables_list (list): List of table names. # CHANGED: Updated docstring
+        tables_list (list): List of table names.
         sensitive_columns (list, optional): List of column names to mark as sensitive.
         sensitive_keywords (list, optional): Keywords to detect sensitive columns.
         
@@ -525,24 +525,24 @@ if __name__ == "__main__":
     # Assuming secrets file uses variable names: host, port, user, password, database
     ch_host = os.getenv('host')
     # Read port as string first using the same variable name
-    ch_port = os.getenv('port') # Keep as string initially for robust check
+    ch_port = os.getenv('port')
     ch_user = os.getenv('user')
     ch_password = os.getenv('password')
     # Removed ch_database retrieval as it's not used for connection
-
+'''
     # Convert port to integer, handle potential errors
     # Port must be provided and be a valid integer
     ch_port = None # Initialize as None
     if ch_port is None:
         logging.error("Error: ClickHouse port ('port') not found in environment variables loaded from the secrets file.")
-        exit(1) # Exit if port is not set
+        # exit(1) # Exit if port is not set --prodcued an error, hence commented out as else statement did not trigger
     else:
         try:
             ch_port = int(ch_port) # Convert the string to an integer
         except ValueError:
             logging.error(f"Error: Invalid port value '{ch_port}' in secrets file. Port must be an integer.")
             exit(1) # Exit if port is invalid
-
+'''
 
     # 1. Validate essential configuration
     # Check for connection details and required file paths
