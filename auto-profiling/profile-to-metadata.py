@@ -189,7 +189,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,
            for table_name in tables_list: # Iterate directly over table names
                 try:
                     full_table_name = table_name # Use table_name directly
-                    db_name = db_connection.database # Get the database name from the client object (will be default if not specified)
+                    db_name = "default" # Get the database name from the client object (will be default if not specified)
 
                     logging.info(f"Processing table: {full_table_name}")
 
@@ -654,7 +654,7 @@ if __name__ == "__main__":
         # Close the ClickHouse connection
         # clickhouse-driver Client objects have a close() method
         try:
-            ch_client.close() # Use the close() method for Client
+            ch_client.disconnect() # Use the disconnect() method for Client
             logging.info("ClickHouse connection closed.")
         except Exception as e:
             logging.error(f"Error closing ClickHouse connection: {e}")
