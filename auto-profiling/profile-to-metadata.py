@@ -20,8 +20,11 @@ project_root = os.path.join(script_dir, '..')
 # Calculate the path to the table list file relative to the project root
 tables_path = os.path.join(project_root, 'scripts', 'flex11_table_list.txt') # Renamed to match usage in main block
 
-# Calculate the path to the output directory relative to the project root
+# Calculate the path to the output metadata directory relative to the project root
 metadata_dir = os.path.join(project_root, 'metadata_profile')
+
+# calculate path to the output html direcotry relative to project root
+html_dir = os.path.join(project_root, 'html_profile')
 
 # Load environment variables from the specified secrets file
 secrets_path = os.path.join(project_root, 'env', 'clickh_secrets.env')
@@ -234,7 +237,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,
         logging.error(f"An unexpected error occurred in generate_profiling_report: {e}") # CHANGED: Replaced print with logging.error
         return pd.DataFrame()
 
-def _process_dataset(data, source_name, table_name, schema_name, sensitive_columns, sensitive_keywords):
+def _process_dataset(data, source_name, table_name, schema_name, sensitive_columns, sensitive_keywords, output_dir: str | None = None)
     """Helper function to process a single dataset (DB table)"""
     # Store the total record count
     total_records = len(data)
@@ -250,7 +253,7 @@ def _process_dataset(data, source_name, table_name, schema_name, sensitive_colum
     if sensitive_columns:
         for col in sensitive_columns:
             if col in data.columns:
-                logging.info(f"Hashing sensitive column: {col}") # CHANGED: Replaced print with logging.info
+                logging.info(f"Hashing sensitive column: {col}")
                 data[col] = hash_column(data[col])
 
     # Configure settings to mark sensitive columns
@@ -261,15 +264,18 @@ def _process_dataset(data, source_name, table_name, schema_name, sensitive_colum
                                        if col in data.columns}
 
     # Generate profiling report
-    # Suppress the default HTML report generation if only JSON is needed
+    # Both HTML report generation and JSON is needed
     profile = ProfileReport(
         data,
         title=f"{source_name} Profiling Report",
         explorative=True,
         config=config,
-        # Set to False if you only need the JSON output for metadata
-        # to_file=None
         )
+    
+    output_filename = f"{table}_profiling_report.html"
+    output_html_path = os.path.join(output_dir, output_filename) # Construct full path using html_output_dir
+    profile.to_file(output_html_path) # Save the HTML report to the specified directory
+    logging.info(f"Generated profiling report for {source_name} at {output_html_path}")
 
     # Get JSON data and extract variables data
     # Use to_json() directly if to_file is None
@@ -278,7 +284,7 @@ def _process_dataset(data, source_name, table_name, schema_name, sensitive_colum
 
     # Check if 'variables' key exists before accessing it
     if 'variables' not in json_data:
-        logging.warning(f"Warning: 'variables' key not found in profiling report JSON for {source_name}. Skipping metadata extraction.") # CHANGED: Replaced print with logging.warning
+        logging.warning(f"Warning: 'variables' key not found in profiling report JSON for {source_name}. Skipping metadata extraction.")
         return pd.DataFrame() # Return empty DataFrame if no variable data
 
     variables_data = json_data['variables']
@@ -374,14 +380,14 @@ def generate_metadata_file(var_df: pd.DataFrame, output_dir: str) -> pd.DataFram
 
     Args:
         var_df (DataFrame): DataFrame with profiling information
-        output_dir (str): Path to the directory to save the metadata file # CHANGED: Parameter name changed to output_dir
+        output_dir (str): Path to the directory to save the metadata file
 
     Returns:
         DataFrame: The processed metadata DataFrame that was saved
     """
     try:
         # Create the output directory if it doesn't exist
-        # os.makedirs(output_dir, exist_ok=True)
+        # os.makedirs(metadata_output_dir, exist_ok=True)
 
         # Create a copy to avoid modifying the original DataFrame
         metadata_df = var_df.copy()
@@ -403,7 +409,7 @@ def generate_metadata_file(var_df: pd.DataFrame, output_dir: str) -> pd.DataFram
         # Construct the full output file path within the output directory
         # Construct filename using only table name
         output_filename = f"{table}_metadata.csv"
-        output_path = os.path.join(output_dir, output_filename) # Construct full path using output_dir
+        output_path = os.path.join(output_dir, output_filename) # Construct full path using metadata_output_dir
 
         logging.info(f"Preparing metadata file: {output_path}")
 
@@ -518,10 +524,17 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        '--output_dir', # Changed argument name to output_dir
+        '--metadata_output_dir',
         type=str,
         default=metadata_dir, # Set default to the calculated path
         help="Path to the directory to save metadata files"
+    )
+
+    parser.add_argument(
+        '--html_output_dir',
+        type=str,
+        default=html_dir, # Set default to the calculated path
+        help="Path to the directory to save the html files"
     )
 
     parser.add_argument(
@@ -590,15 +603,20 @@ if __name__ == "__main__":
         logging.error(f"Error: Table list file path does not exist: {args.tables_file}")
         exit(1)
 
-    # We don't need to check if metadata_dir exists here, generate_metadata_file creates it.
-    # But ensure the variable isn't empty
     # CHANGED: Use args.output_dir which is set by argparse (defaulting to metadata_dir)
-    if not args.output_dir:
+    if not os.path.exists(args.metadata_output_dir):
         logging.error("Error: Calculated metadata output directory path is empty.")
         exit(1)
     # CHANGED: Added check to create the output directory if it doesn't exist
-    os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(args.metadata_output_dir, exist_ok=True)
     logging.info(f"Ensured output directory exists: {args.output_dir}")
+
+    # Ensure HTML output directory exists (it will be created by _process_dataset if needed, but good to log)
+    if not os.path.exists(args.html_output_dir):
+        logging.error("Error: Calculated HTML output directory path is empty.")
+        exit(1)
+    # os.makedirs(args.html_output_dir, exist_ok=True) # This will be done in _process_dataset
+    logging.info(f"HTML reports will be saved to: {args.html_output_dir}")
 
     # --- Sensitive Column Handling ---
     # Attempt to load sensitive columns from a file first
@@ -627,13 +645,14 @@ if __name__ == "__main__":
         tables_to_profile = get_list_of_tables(args.tables_file)
 
         if tables_to_profile:
-            # 4. Generate profiling report for ClickHouse tables
+            # 4. Generate profiling report for all ClickHouse tables
             # Pass db_connection (the Client object) and tables_list
             profiling_results_df = generate_profiling_report(
                 db_connection=ch_client, # Pass the Client object
                 tables_list=tables_to_profile,
                 sensitive_columns=sensitive_cols_from_file, # Expected to be a list from a file. However, this will be None for now
                 sensitive_keywords=sensitive_keyword_list # Use the keyword list for detection
+                output_dir=args.html_output_dir # Pass the HTML output directory
             )
 
             # 5. Generate and save the metadata file to the specified directory
@@ -641,10 +660,7 @@ if __name__ == "__main__":
 
                 for table_name in profiling_results_df['table_name'].unique(): # Loop through unique tables
                     single_table_df = profiling_results_df[profiling_results_df['table_name'] == table_name]
-                    generate_metadata_file(single_table_df, output_dir=args.output_dir)
-                # Pass the calculated METADATA_OUTPUT_DIR
-                # Use args.output_dir
-                generate_metadata_file(profiling_results_df, output_dir=args.output_dir)
+                    generate_metadata_file(single_table_df, output_dir=args.metadata_output_dir)
             else:
                 logging.info("No profiling results to generate metadata file.")
 
