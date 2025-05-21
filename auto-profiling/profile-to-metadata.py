@@ -5,7 +5,7 @@ import argparse
 import pandas as pd
 import hashlib
 import json
-import getpass
+# import getpass
 from dotenv import load_dotenv
 from clickhouse_driver import Client 
 import logging
@@ -68,7 +68,7 @@ def setup_logging(log_level=logging.INFO, log_file=None):
     logging.debug(f"Python version: {sys.version}")
     logging.debug(f"Script started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-def connect_to_clickhouse(host: str, port: int, user: str, password: str): # Removed database parameter from function signature
+def connect_to_clickhouse(host: str, port: int, user: str, password: str) -> Client | None: # Removed database parameter from function signature
     """
     Connect to ClickHouse database (using default database).
 
@@ -86,7 +86,7 @@ def connect_to_clickhouse(host: str, port: int, user: str, password: str): # Rem
         # Use the Client object for connection
         client = Client(
             host=host,
-            port=int(port), # Explicitly convert port to int here for the client
+            port=port, # Explicitly convert port to int here for the client
             user=user,
             password=password
             # Removed database parameter from Client constructor
@@ -128,7 +128,7 @@ def hash_column(column: pd.Series) -> pd.Series:
     return column.apply(lambda x: hashlib.sha256(str(x).encode()).hexdigest() if pd.notnull(x) else x)
 
 # Function to read sensitive columns from a file
-def get_list_sensitive_col(file_path: str) -> list | None:
+def get_sensitive_columns_from_file(file_path: str) -> list | None:
     """
     Reads sensitive column names from a text file, one column name per line.
 
@@ -174,7 +174,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,
     # Default sensitive keywords if not provided
     if sensitive_keywords is None:
         sensitive_keywords = ["bvn", "id number", "nin", "passport", "driver", 
-                             "identificationnumber", "chn"]
+                             "identificationnumber", "chn", "email","phone number", "mobile number", "address"] # added email, phone or mobile number and address
     
     results_dfs = []  # To store results from multiple tables
     
@@ -508,7 +508,7 @@ if __name__ == "__main__":
     # parser.add_argument('--ch_port', type=int, help='ClickHouse port')
     # parser.add_argument('--ch_user', type=str, help='ClickHouse user')
     # parser.add_argument('--ch_password', type=str, help='ClickHouse password')
-    # parser.add_argument('--ch_database', type=str, help='ClickHouse database') # If not using default
+    # parser.add_argument('--ch_database', type=str, help='ClickHouse database') # Not using hence it is default
 
     parser.add_argument(
         '--tables_file',
@@ -558,29 +558,27 @@ if __name__ == "__main__":
     # Assuming secrets file uses variable names: host, port, user, password, database
     ch_host = os.getenv('host')
     # Read port as string first using the same variable name
-    ch_port = os.getenv('port')
+    ch_port_str = os.getenv('port')
     ch_user = os.getenv('user')
     ch_password = os.getenv('password')
     # Removed ch_database retrieval as it's not used for connection
-'''
+    
     # Convert port to integer, handle potential errors
     # Port must be provided and be a valid integer
-    ch_port = None # Initialize as None
-    if ch_port is None:
+    if ch_port_str is None:
         logging.error("Error: ClickHouse port ('port') not found in environment variables loaded from the secrets file.")
         # exit(1) # Exit if port is not set --prodcued an error, hence commented out as else statement did not trigger
     else:
         try:
-            ch_port = int(ch_port) # Convert the string to an integer
+            ch_port = int(ch_port_str) # Convert the string to an integer
         except ValueError:
-            logging.error(f"Error: Invalid port value '{ch_port}' in secrets file. Port must be an integer.")
+            logging.error(f"Error: Invalid port value '{ch_port_str}' in secrets file. Port must be an integer.")
             exit(1) # Exit if port is invalid
-'''
-
+    
     # 1. Validate essential configuration
     # Check for connection details and required file paths
     # Check if ch_port is not None (it will be None only if os.getenv('port') returned None)
-    if not all([ch_host, ch_port, ch_user, ch_password]):
+    if not all([ch_host, ch_port is not None, ch_user, ch_password]):
         logging.error("Error: Essential ClickHouse connection details (host, port, user, password) not found or invalid in environment variables loaded from the secrets file.") # CHANGED: Replaced print with logging.error
         # Print the original string value of port if available, for better error message
         logging.error(f"Host: {ch_host}, Port: {os.getenv('port')}, User: {ch_user}")
@@ -588,7 +586,7 @@ if __name__ == "__main__":
 
     # Check if the calculated paths for inputs/outputs seem valid
     # Use args.tables_file which is set by argparse (defaulting to tables_path)
-   if not os.path.exists(args.tables_file):
+    if not os.path.exists(args.tables_file):
         logging.error(f"Error: Table list file path does not exist: {args.tables_file}")
         exit(1)
 
@@ -596,15 +594,15 @@ if __name__ == "__main__":
     # But ensure the variable isn't empty
     # CHANGED: Use args.output_dir which is set by argparse (defaulting to metadata_dir)
     if not args.output_dir:
-         logging.error("Error: Calculated metadata output directory path is empty.")
-         exit(1)
+        logging.error("Error: Calculated metadata output directory path is empty.")
+        exit(1)
     # CHANGED: Added check to create the output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
     logging.info(f"Ensured output directory exists: {args.output_dir}")
 
     # --- Sensitive Column Handling ---
     # Attempt to load sensitive columns from a file first
-    sensitive_cols_from_file = get_list_sensitive_col(sensitive_col_path)
+    sensitive_cols_from_file = get_sensitive_columns_from_file(sensitive_col_path)
 
     # Define keywords for automatic detection (fallback)
     sensitive_keyword_list = ["bvn", "id number", "nin", "passport", "driver",
@@ -640,6 +638,10 @@ if __name__ == "__main__":
 
             # 5. Generate and save the metadata file to the specified directory
             if not profiling_results_df.empty:
+
+                for table_name in profiling_results_df['table_name'].unique(): # Loop through unique tables
+                    single_table_df = profiling_results_df[profiling_results_df['table_name'] == table_name]
+                    generate_metadata_file(single_table_df, output_dir=args.output_dir)
                 # Pass the calculated METADATA_OUTPUT_DIR
                 # Use args.output_dir
                 generate_metadata_file(profiling_results_df, output_dir=args.output_dir)
