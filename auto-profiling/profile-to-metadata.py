@@ -160,7 +160,7 @@ def get_sensitive_columns_from_file(file_path: str) -> list | None:
         return None
     
 def generate_profiling_report(db_connection: Client, tables_list: list, 
-                              sensitive_columns=None, sensitive_keywords=None) -> pd.DataFrame:
+                              sensitive_columns=None, sensitive_keywords=None, output_dir: str) -> pd.DataFrame:
     """
     Generate a profiling report using ydata-profiling for Clickhouse database tables
     
@@ -169,6 +169,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,
         tables_list (list): List of table names.
         sensitive_columns (list, optional): List of column names to mark as sensitive. Expected to return None for now and sensitive keywords will be used for detection
         sensitive_keywords (list, optional): Keywords to detect sensitive columns.
+        output_dir (str): Directory to save HTML reports. If None, HTML reports are not saved. # Updated.
         
     Returns:
         DataFrame: DataFrame with profiling information
