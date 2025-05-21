@@ -297,7 +297,7 @@ def _process_dataset(data, source_name, table_name, schema_name, sensitive_colum
     if 'count' in variables_df.columns and 'n_missing' in variables_df.columns:
         # Avoid division by zero if count is 0
         variables_df['completeness_pct'] = variables_df.apply(
-            lambda row: ((row['count'] - row['n_missing']) / row['count'] * 100).round(2) if row['count'] > 0 else 0,
+            lambda row: round(((row['count'] - row['n_missing']) / row['count'] * 100),2) if row['count'] > 0 else 0,
             axis=1
         )
     else:
