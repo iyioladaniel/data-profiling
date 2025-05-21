@@ -5,7 +5,6 @@ import argparse
 import pandas as pd
 import hashlib
 import json
-# import getpass
 from dotenv import load_dotenv
 from clickhouse_driver import Client 
 import logging
@@ -237,7 +236,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,
         logging.error(f"An unexpected error occurred in generate_profiling_report: {e}") # CHANGED: Replaced print with logging.error
         return pd.DataFrame()
 
-def _process_dataset(data, source_name, table_name, schema_name, sensitive_columns, sensitive_keywords, output_dir: str | None = None):
+def _process_dataset(data, source_name, table_name, schema_name, sensitive_columns, sensitive_keywords, output_dir: str | None = None): #updated
     """Helper function to process a single dataset (DB table)"""
     # Store the total record count
     total_records = len(data)
@@ -603,13 +602,13 @@ if __name__ == "__main__":
         logging.error(f"Error: Table list file path does not exist: {args.tables_file}")
         exit(1)
 
-    # CHANGED: Use args.output_dir which is set by argparse (defaulting to metadata_dir)
+    # CHANGED: Use args.metadata_output_dir which is set by argparse (defaulting to metadata_dir)
     if not os.path.exists(args.metadata_output_dir):
         logging.error("Error: Calculated metadata output directory path is empty.")
         exit(1)
     # CHANGED: Added check to create the output directory if it doesn't exist
     os.makedirs(args.metadata_output_dir, exist_ok=True)
-    logging.info(f"Ensured output directory exists: {args.output_dir}")
+    logging.info(f"Ensured output directory exists: {args.metadata_output_dir}")
 
     # Ensure HTML output directory exists (it will be created by _process_dataset if needed, but good to log)
     if not os.path.exists(args.html_output_dir):
@@ -651,7 +650,7 @@ if __name__ == "__main__":
                 db_connection=ch_client, # Pass the Client object
                 tables_list=tables_to_profile,
                 sensitive_columns=sensitive_cols_from_file, # Expected to be a list from a file. However, this will be None for now
-                sensitive_keywords=sensitive_keyword_list # Use the keyword list for detection
+                sensitive_keywords=sensitive_keyword_list, # Use the keyword list for detection. Updated
                 output_dir=args.html_output_dir # Pass the HTML output directory
             )
 
