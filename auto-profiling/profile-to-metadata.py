@@ -261,6 +261,14 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
         config.variables.descriptions = {col: "Sensitive Data (Hashed)"
                                        for col in sensitive_columns
                                        if col in data.columns}
+        
+    # Set correlation settings properly for current ydata-profiling version
+    config.correlations.calculate = False
+    
+    # Disable other expensive computations
+    config.missing_diagrams.heatmap = False
+    config.missing_diagrams.matrix = False
+    config.interactions.calculate = False
 
     # Generate profiling report
     # Both HTML report generation and JSON is needed
@@ -268,10 +276,7 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
         data,
         title=f"{source_name} Profiling Report",
         explorative=True,
-        config=config,
-        correlation=None, # Disable correlation analysis
-        missing_diagrams={"heatmap":False, "matrix":False}, # Disable missing diagrams # changed, view impact
-        interactions=None, # Disable interactions
+        config=config, # Disable interactions
         )
     
     output_filename = f"{table_name}_profiling_report.html"
