@@ -159,8 +159,7 @@ def get_sensitive_columns_from_file(file_path: str) -> list | None:
         logging.error(f"Error reading sensitive columns file {file_path}: {e}. Will use keyword detection as fallback.")
         return None
     
-def generate_profiling_report(db_connection: Client, tables_list: list, 
-                              sensitive_columns=None, sensitive_keywords=None, output_dir: str) -> pd.DataFrame:
+def generate_profiling_report(db_connection: Client, tables_list: list,  output_dir: str, sensitive_columns=None, sensitive_keywords=None) -> pd.DataFrame:
     """
     Generate a profiling report using ydata-profiling for Clickhouse database tables
     
@@ -650,9 +649,9 @@ if __name__ == "__main__":
             profiling_results_df = generate_profiling_report(
                 db_connection=ch_client, # Pass the Client object
                 tables_list=tables_to_profile,
+                output_dir=args.html_output_dir, # Pass the HTML output directory
                 sensitive_columns=sensitive_cols_from_file, # Expected to be a list from a file. However, this will be None for now
-                sensitive_keywords=sensitive_keyword_list, # Use the keyword list for detection. Updated
-                output_dir=args.html_output_dir # Pass the HTML output directory
+                sensitive_keywords=sensitive_keyword_list # Use the keyword list for detection. Updated
             )
 
             # 5. Generate and save the metadata file to the specified directory
