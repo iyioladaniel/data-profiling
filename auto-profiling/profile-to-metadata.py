@@ -214,7 +214,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,  output_
                         logging.warning(f"Table {full_table_name} is empty. Skipping.")
                         continue
                     
-                    result_df = _process_dataset(data, full_table_name, table_name, db_name, # CHANGED: Pass db_name
+                    result_df = _process_dataset(data, full_table_name, table_name, db_name, output_dir, # CHANGED: Pass db_name
                                                sensitive_columns, sensitive_keywords)
                     results_dfs.append(result_df)
 
@@ -236,7 +236,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,  output_
         logging.error(f"An unexpected error occurred in generate_profiling_report: {e}") # CHANGED: Replaced print with logging.error
         return pd.DataFrame()
 
-def _process_dataset(data, source_name, table_name, schema_name, sensitive_columns, sensitive_keywords, output_dir): #updated
+def _process_dataset(data, source_name, table_name, schema_name,  output_dir, sensitive_columns, sensitive_keywords): #updated
     """Helper function to process a single dataset (DB table)"""
     # Store the total record count
     total_records = len(data)
@@ -271,7 +271,7 @@ def _process_dataset(data, source_name, table_name, schema_name, sensitive_colum
         config=config,
         )
     
-    output_filename = f"{table}_profiling_report.html"
+    output_filename = f"{table_name}_profiling_report.html"
     output_html_path = os.path.join(output_dir, output_filename) # Construct full path using html_output_dir
     profile.to_file(output_html_path) # Save the HTML report to the specified directory
     logging.info(f"Generated profiling report for {source_name} at {output_html_path}")
