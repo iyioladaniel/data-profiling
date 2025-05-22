@@ -236,7 +236,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,  output_
         logging.error(f"An unexpected error occurred in generate_profiling_report: {e}") # CHANGED: Replaced print with logging.error
         return pd.DataFrame()
 
-def _process_dataset(data, source_name, table_name, schema_name,  output_dir, sensitive_columns, sensitive_keywords): #updated
+def _process_dataset(data, source_name, table_name, schema_name, output_dir, sensitive_columns, sensitive_keywords): #updated
     """Helper function to process a single dataset (DB table)"""
     # Store the total record count
     total_records = len(data)
@@ -269,6 +269,8 @@ def _process_dataset(data, source_name, table_name, schema_name,  output_dir, se
         title=f"{source_name} Profiling Report",
         explorative=True,
         config=config,
+        correlation=None, # Disable correlation analysis
+        interactions=None, # Disable interactions
         )
     
     output_filename = f"{table_name}_profiling_report.html"
