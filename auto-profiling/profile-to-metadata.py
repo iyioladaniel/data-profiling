@@ -262,13 +262,19 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
                                        for col in sensitive_columns
                                        if col in data.columns}
         
-    # Set correlation settings properly for current ydata-profiling version
-    config.correlations.calculate = False
-    
-    # Disable other expensive computations
-    config.missing_diagrams.heatmap = False
+    # Explicitly disable the missing diagram matrix, heatmap, and dendrogram for memory optimization
     config.missing_diagrams.matrix = False
-    config.interactions.calculate = False
+    config.missing_diagrams.heatmap = False
+    config.missing_diagrams.dendrogram = False
+    # The 'bar' diagram will remain enabled by default unless explicitly set to False
+
+    # Explicitly disable all correlations via config
+    config.correlations.pearson = False
+    config.correlations.spearman = False
+    config.correlations.phi_k = False
+    config.correlations.cramers_v = False
+    config.correlations.kendall = False
+    config.correlations.overrides = False # This can sometimes be useful if there are other correlation types
 
     # Generate profiling report
     # Both HTML report generation and JSON is needed
@@ -276,7 +282,8 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
         data,
         title=f"{source_name} Profiling Report",
         explorative=True,
-        config=config, # Disable interactions
+        config=config,
+        interactions=None # Disable interactions
         )
     
     output_filename = f"{table_name}_profiling_report.html"
