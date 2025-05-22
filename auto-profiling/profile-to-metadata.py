@@ -270,6 +270,7 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
         explorative=True,
         config=config,
         correlation=None, # Disable correlation analysis
+        missing_diagrams={"heatmap":False, "matrix":False, "":False}, # Disable missing diagrams # changed, view impact
         interactions=None, # Disable interactions
         )
     
