@@ -607,6 +607,7 @@ if __name__ == "__main__":
     
     # Convert port to integer, handle potential errors
     # Port must be provided and be a valid integer
+    ch_port = None # Initialize ch_port to None
     if ch_port_str is None:
         logging.error("Error: ClickHouse port ('port') not found in environment variables loaded from the secrets file.")
         # exit(1) # Exit if port is not set --prodcued an error, hence commented out as else statement did not trigger
