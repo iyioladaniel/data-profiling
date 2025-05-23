@@ -264,7 +264,7 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
                 data[col] = pd.to_datetime(data[col], errors='coerce')
             except Exception as e:
                 logging.warning(f"Could not convert column '{col}' to datetime: {e}")
-            type_schema[col] = "date"
+            type_schema[col] = "Date"
 
     # Configure settings to mark sensitive columns
     config = Settings()
@@ -297,7 +297,7 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
         correlations=None, # Disable correlations
         missing_diagrams=None, # Disable missing diagrams
         config=config,
-        interactions=None # Disable interactions
+        interactions=None, # Disable interactions
         type_schema=type_schema # Pass the type schema for date columns
         )
     
