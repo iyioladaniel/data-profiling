@@ -259,11 +259,11 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
     type_schema = {}
     for col in data.columns:
         if 'date' in col.lower():
-            # Try to convert to datetime (inplace)
-            try:
-                data[col] = pd.to_datetime(data[col], errors='coerce')
-            except Exception as e:
-                logging.warning(f"Could not convert column '{col}' to datetime: {e}")
+            # # Try to convert to datetime (inplace)
+            # try:
+            #     data[col] = pd.to_datetime(data[col], errors='coerce')
+            # except Exception as e:
+            #     logging.warning(f"Could not convert column '{col}' to datetime: {e}")
             type_schema[col] = "Date"
 
     # Configure settings to mark sensitive columns
