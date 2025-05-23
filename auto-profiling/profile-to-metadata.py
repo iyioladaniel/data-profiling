@@ -264,7 +264,7 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
             #     data[col] = pd.to_datetime(data[col], errors='coerce')
             # except Exception as e:
             #     logging.warning(f"Could not convert column '{col}' to datetime: {e}")
-            type_schema[col] = "Date"
+            type_schema[col] = "DateTime"
 
     # Configure settings to mark sensitive columns
     config = Settings()
