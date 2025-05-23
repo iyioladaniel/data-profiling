@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import logging
 import sys
 from datetime import datetime
+import clickhouse_connect as cc
 
 def setup_logging(log_level=logging.INFO, log_file=None):
     """
@@ -225,7 +226,7 @@ def _process_dataset(data, source_name, table_name, schema_name, sensitive_colum
     variables_df['table_name'] = table_name
     variables_df['schema_name'] = schema_name
     variables_df['total_records'] = total_records
-    variables_df['created_at'] = pd.Timestamp.now()
+    #variables_df['created_at'] = pd.Timestamp.now()
     variables_df['last_updated'] = pd.Timestamp.now()
     
     # Calculate completeness percentage
