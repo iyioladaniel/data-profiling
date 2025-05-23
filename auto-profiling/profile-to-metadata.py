@@ -191,7 +191,7 @@ def generate_profiling_report(db_connection: Client, tables_list: list,  output_
            for table_name in tables_list: # Iterate directly over table names
                 try:
                     full_table_name = table_name # Use table_name directly
-                    db_name = "default" # Get the database name from the client object (will be default if not specified)
+                    db_name = full_table_name.split("_")[0] #"default" # Get the database name from the client object (will be default if not specified)
 
                     logging.info(f"Processing table: {full_table_name}")
 
@@ -254,6 +254,17 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
             if col in data.columns:
                 logging.info(f"Hashing sensitive column: {col}")
                 data[col] = hash_column(data[col])
+    
+    # Infer date columns and build type_schema
+    type_schema = {}
+    for col in data.columns:
+        if 'date' in col.lower():
+            # Try to convert to datetime (inplace)
+            try:
+                data[col] = pd.to_datetime(data[col], errors='coerce')
+            except Exception as e:
+                logging.warning(f"Could not convert column '{col}' to datetime: {e}")
+            type_schema[col] = "date"
 
     # Configure settings to mark sensitive columns
     config = Settings()
@@ -287,6 +298,7 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
         missing_diagrams=None, # Disable missing diagrams
         config=config,
         interactions=None # Disable interactions
+        type_schema=type_schema # Pass the type schema for date columns
         )
     
     output_filename = f"{table_name}_profiling_report.html"
