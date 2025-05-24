@@ -263,7 +263,7 @@ def _process_dataset(
     variables_df = pd.DataFrame(variables_data).transpose()
     variables_df = variables_df.reset_index().rename(columns={'index': 'column_name'})
     variables_df['table_name'] = table_name
-    variables_df['schema_name'] = schema_name
+    variables_df['source'] = schema_name
     variables_df['total_records'] = total_records
     variables_df['last_updated'] = pd.Timestamp.now()
     # Mark sensitive columns
@@ -394,16 +394,26 @@ def generate_profiling_report(
             for table in tables_list:
                 try:
                     table_name_list = table.split('_')
-                    source = table_name_list[0]
+                    source_application = table_name_list[0]
                     if len(table_name_list) > 1:
                         table_name = '_'.join(table_name_list[1:])
                     else:
                         table_name = table_name_list[0]
-                    logging.info(f"Reading ClickHouse table: {table} (source_application: {source}, table: {table_name})")
+                    logging.info(f"Reading ClickHouse table: {table} (source_application: {source_application}, table: {table_name})")
                     query = f'SELECT * FROM {table}'
                     # Get column names from DESCRIBE TABLE
                     data = pd.DataFrame(db_connection.execute(query), columns=[col[0] for col in db_connection.execute(f"DESCRIBE TABLE {table}")])
-                    result_df = _process_dataset(data, table, table_name=table_name, schema_name=source, html_output_dir=html_output_dir, sensitive_columns=sensitive_columns, sensitive_keywords=sensitive_keywords, hash_sensitive=hash_sensitive, profile_type=profile_type)
+                    result_df = _process_dataset(
+                        data,
+                        source_name=table,  # Use clickhouse table name as source
+                        table_name=table_name,
+                        schema_name=source_application,  # use source application name for schema_name
+                        html_output_dir=html_output_dir,
+                        sensitive_columns=sensitive_columns,
+                        sensitive_keywords=sensitive_keywords,
+                        hash_sensitive=hash_sensitive,
+                        profile_type=profile_type
+                    )
                     results_dfs.append(result_df)
                 except Exception as e:
                     logging.error(f"Error processing ClickHouse table {table}: {e}")
@@ -440,18 +450,19 @@ def generate_metadata_file(
             if output_dir is None:
                 output_path = "metadata_report.csv"
             else:
-                if 'schema_name' in metadata_df.columns and 'table_name' in metadata_df.columns:
-                    schema = metadata_df['schema_name'].iloc[0]
-                    table = metadata_df['table_name'].iloc[0]
-                    if schema and table:
-                        output_path = os.path.join(output_dir, f"{schema}_{table}_metadata.csv")
-                    else:
-                        output_path = os.path.join(output_dir, "metadata_report.csv")
-                elif 'table_name' in metadata_df.columns:
-                    table = metadata_df['table_name'].iloc[0]
-                    output_path = os.path.join(output_dir, f"{table}_metadata.csv")
-                else:
-                    output_path = os.path.join(output_dir, "metadata_report.csv")
+                output_path = os.path.join(output_dir, "metadata_report.csv")
+                # if 'schema_name' in metadata_df.columns and 'table_name' in metadata_df.columns:
+                #     schema = metadata_df['schema_name'].iloc[0]
+                #     table = metadata_df['table_name'].iloc[0]
+                #     if schema and table:
+                #         output_path = os.path.join(output_dir, f"{schema}_{table}_metadata.csv")
+                #     else:
+                #         output_path = os.path.join(output_dir, "metadata_report.csv")
+                # elif 'table_name' in metadata_df.columns:
+                #     table = metadata_df['table_name'].iloc[0]
+                #     output_path = os.path.join(output_dir, f"{table}_metadata.csv")
+                # else:
+                    #output_path = os.path.join(output_dir, "metadata_report.csv")
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         logging.info(f"Preparing metadata file: {output_path}")
         # Rename columns for consistency
