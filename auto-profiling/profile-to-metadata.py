@@ -403,7 +403,7 @@ def generate_profiling_report(
                     query = f'SELECT * FROM {table}'
                     # Get column names from DESCRIBE TABLE
                     data = pd.DataFrame(db_connection.execute(query), columns=[col[0] for col in db_connection.execute(f"DESCRIBE TABLE {table}")])
-                    result_df = _process_dataset(data, source, table_name, None, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive, profile_type=profile_type)
+                    result_df = _process_dataset(data, table, table_name=table_name, schema_name=source, html_output_dir=html_output_dir, sensitive_columns=sensitive_columns, sensitive_keywords=sensitive_keywords, hash_sensitive=hash_sensitive, profile_type=profile_type)
                     results_dfs.append(result_df)
                 except Exception as e:
                     logging.error(f"Error processing ClickHouse table {table}: {e}")
@@ -482,7 +482,7 @@ def generate_metadata_file(
         if os.path.exists(output_path):
             logging.info(f"Metadata file {output_path} already exists. Checking for new records...")
             existing_df = pd.read_csv(output_path)
-            key_columns = ['schema_name', 'table_name', 'column_name']
+            key_columns = ['source', 'table_name', 'column_name']
             key_columns = [col for col in key_columns if col in metadata_df.columns and col in existing_df.columns]
             if key_columns:
                 existing_keys = set(tuple(row) for row in existing_df[key_columns].itertuples(index=False, name=None))
