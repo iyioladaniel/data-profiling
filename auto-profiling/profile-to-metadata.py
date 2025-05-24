@@ -292,7 +292,8 @@ def _process_dataset(data, source_name, table_name, schema_name, output_dir, sen
     profile = ProfileReport(
         data,
         title=f"{source_name} Profiling Report",
-        explorative=True,
+        explorative=False, # Set to False for faster processing
+        minimal=True, # Set to True for faster processing
         samples=None, # Disable sample data
         correlations=None, # Disable correlations
         missing_diagrams=None, # Disable missing diagrams
