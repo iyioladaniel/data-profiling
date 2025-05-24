@@ -183,7 +183,8 @@ def _process_dataset(
     sensitive_columns: Optional[List[str]],
     sensitive_keywords: Optional[List[str]],
     hash_sensitive: bool = True,
-    connection: Optional[Any] = None
+    connection: Optional[Any] = None,
+    profile_type: str = "full"
 ) -> pd.DataFrame:
     """
     Profile a single dataset (DataFrame), generate HTML report, and extract metadata.
@@ -197,6 +198,7 @@ def _process_dataset(
         sensitive_keywords: List of keywords for sensitive detection
         hash_sensitive: If True, hash sensitive columns
         connection: DB connection for metadata enrichment (optional)
+        profile_type: 'minimal' or 'full'
     Returns:
         DataFrame with profiling metadata
     """
@@ -219,13 +221,35 @@ def _process_dataset(
     config = Settings()
     if sensitive_columns:
         config.variables.descriptions = {col: "Sensitive Data (Hashed)" for col in sensitive_columns if col in data.columns}
-    # Generate profiling report
-    profile = ProfileReport(
-        data,
-        title=f"{source_name} Profiling Report",
-        explorative=True,
-        config=config
-    )
+        
+    # Infer date columns and build type_schema
+    type_schema = {}
+    for col in data.columns:
+        if 'date' in col.lower():
+            type_schema[col] = "DateTime"
+    
+    # Generate profiling report based on profile_type
+    if profile_type == "minimal":
+        profile = ProfileReport(
+            data,
+            title=f"{source_name} Profiling Report",
+            explorative=False,
+            minimal=True,
+            samples=None,  # Disable sample data
+            correlations=None,  # Disable correlations
+            missing_diagrams=None,  # Disable missing diagrams
+            config=config,
+            interactions=None,  # Disable interactions
+            type_schema=type_schema  # Pass the type schema for date columns
+        )
+    else:
+        profile = ProfileReport(
+            data,
+            title=f"{source_name} Profiling Report",
+            explorative=True,
+            config=config,
+            type_schema=type_schema  # Pass the type schema for date columns
+        )
     # Save HTML report
     if html_output_dir:
         os.makedirs(html_output_dir, exist_ok=True)
@@ -324,7 +348,8 @@ def generate_profiling_report(
     html_output_dir: Optional[str] = None,
     sensitive_columns: Optional[List[str]] = None,
     sensitive_keywords: Optional[List[str]] = None,
-    hash_sensitive: bool = True
+    hash_sensitive: bool = True,
+    profile_type: str = "full"
 ) -> pd.DataFrame:
     """
     Main entry point for profiling: handles CSV, Oracle, and ClickHouse sources.
@@ -338,6 +363,7 @@ def generate_profiling_report(
         sensitive_columns: List of sensitive columns (or None)
         sensitive_keywords: List of keywords for sensitive detection
         hash_sensitive: If True, hash sensitive columns
+        profile_type: 'minimal' or 'full'
     Returns:
         DataFrame with combined profiling metadata for all sources
     """
@@ -351,7 +377,7 @@ def generate_profiling_report(
             logging.info(f"Reading CSV file: {path_to_csv}")
             data = pd.read_csv(path_to_csv)
             logging.info(f"CSV file loaded with {len(data)} records and {len(data.columns)} columns")
-            result_df = _process_dataset(data, file_name, file_name, None, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive)
+            result_df = _process_dataset(data, file_name, file_name, None, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive, profile_type=profile_type)
             results_dfs.append(result_df)
         elif db_type == 'oracle' and db_connection and tables_list:
             # Profile each Oracle table
@@ -359,7 +385,7 @@ def generate_profiling_report(
                 try:
                     query = f'SELECT * FROM {schema}.{table}'
                     data = pd.read_sql(query, db_connection)
-                    result_df = _process_dataset(data, f"{schema}.{table}", table, schema, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive, connection=db_connection)
+                    result_df = _process_dataset(data, f"{schema}.{table}", table, schema, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive, connection=db_connection, profile_type=profile_type)
                     results_dfs.append(result_df)
                 except Exception as e:
                     logging.error(f"Error processing table {schema}.{table}: {e}")
@@ -370,7 +396,7 @@ def generate_profiling_report(
                     query = f'SELECT * FROM {table}'
                     # Get column names from DESCRIBE TABLE
                     data = pd.DataFrame(db_connection.execute(query), columns=[col[0] for col in db_connection.execute(f"DESCRIBE TABLE {table}")])
-                    result_df = _process_dataset(data, table, table, None, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive)
+                    result_df = _process_dataset(data, table, table, None, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive, profile_type=profile_type)
                     results_dfs.append(result_df)
                 except Exception as e:
                     logging.error(f"Error processing ClickHouse table {table}: {e}")
@@ -493,6 +519,7 @@ def main() -> int:
     parser.add_argument('--no_hash', action='store_true', help="Skip sensitive data hashing")
     parser.add_argument('--log_file', type=str, help="Path to log file (if not specified, a timestamped log file is created automatically)")
     parser.add_argument('--log_level', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Logging level (default: INFO)")
+    parser.add_argument('--profile_type', type=str, default='full', choices=['full', 'minimal'], help="Profiling type: 'full' (default) or 'minimal' (faster, disables some features)")
     args = parser.parse_args()
     log_level = getattr(logging, args.log_level.upper())
     setup_logging(log_level=log_level, log_file=args.log_file)
@@ -519,7 +546,8 @@ def main() -> int:
             html_output_dir=html_output_dir,
             sensitive_columns=sensitive_columns,
             sensitive_keywords=sensitive_keywords,
-            hash_sensitive=hash_sensitive
+            hash_sensitive=hash_sensitive,
+            profile_type=args.profile_type
         )
         if df.empty:
             logging.error("Failed to generate profiling report.")
@@ -558,7 +586,8 @@ def main() -> int:
             html_output_dir=html_output_dir,
             sensitive_columns=sensitive_columns,
             sensitive_keywords=sensitive_keywords,
-            hash_sensitive=hash_sensitive
+            hash_sensitive=hash_sensitive,
+            profile_type=args.profile_type
         )
         if df.empty:
             logging.error("Failed to generate profiling report.")
@@ -593,7 +622,8 @@ def main() -> int:
             html_output_dir=html_output_dir,
             sensitive_columns=sensitive_columns,
             sensitive_keywords=sensitive_keywords,
-            hash_sensitive=hash_sensitive
+            hash_sensitive=hash_sensitive,
+            profile_type=args.profile_type
         )
         if df.empty:
             logging.error("Failed to generate profiling report.")
