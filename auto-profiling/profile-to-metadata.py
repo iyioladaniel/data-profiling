@@ -393,10 +393,17 @@ def generate_profiling_report(
             # Profile each ClickHouse table
             for table in tables_list:
                 try:
+                    table_name_list = table.split('_')
+                    source = table_name_list[0]
+                    if len(table_name_list) > 1:
+                        table_name = '_'.join(table_name_list[1:])
+                    else:
+                        table_name = table_name_list[0]
+                    logging.info(f"Reading ClickHouse table: {table} (source_application: {source}, table: {table_name})")
                     query = f'SELECT * FROM {table}'
                     # Get column names from DESCRIBE TABLE
                     data = pd.DataFrame(db_connection.execute(query), columns=[col[0] for col in db_connection.execute(f"DESCRIBE TABLE {table}")])
-                    result_df = _process_dataset(data, table, table, None, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive, profile_type=profile_type)
+                    result_df = _process_dataset(data, source, table_name, None, html_output_dir, sensitive_columns, sensitive_keywords, hash_sensitive, profile_type=profile_type)
                     results_dfs.append(result_df)
                 except Exception as e:
                     logging.error(f"Error processing ClickHouse table {table}: {e}")
@@ -464,7 +471,7 @@ def generate_metadata_file(
         if rename_cols:
             metadata_df.rename(columns=rename_cols, inplace=True)
         # Reorder columns for readability
-        priority_cols = ['schema_name', 'table_name', 'column_name', 'data_type', 'is_sensitive',
+        priority_cols = ['source', 'table_name', 'column_name', 'data_type', 'is_sensitive',
                         'total_records', 'total_count', 'missing_count', 'completeness_pct',
                         'is_unique', 'unique_count', 'unique_percentage', 'distinct_count', 'distinct_percentage',
                         'category_count', 'position', 'data_length', 'data_precision', 'data_scale',
