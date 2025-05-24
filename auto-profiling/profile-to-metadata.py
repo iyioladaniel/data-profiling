@@ -367,8 +367,8 @@ def generate_profiling_report(
     Returns:
         DataFrame with combined profiling metadata for all sources
     """
-    if sensitive_keywords is None:
-        sensitive_keywords = ["bvn", "id number", "nin", "passport", "driver", "identificationnumber", "chn", "email", "phone number", "mobile number", "address"]
+    #if sensitive_keywords is None:
+    #    sensitive_keywords = ["bvn", "id number", "nin", "passport", "driver", "identificationnumber", "chn", "email", "phone number", "mobile number", "address"]
     results_dfs = []
     try:
         if db_type == 'csv' and path_to_csv:
@@ -549,7 +549,7 @@ def main() -> int:
     if args.sensitive_columns_file:
         sensitive_columns = get_sensitive_columns_from_file(args.sensitive_columns_file)
     # Default sensitive keywords
-    sensitive_keywords = ["bvn", "id number", "nin", "passport", "driver", "identificationnumber", "chn", "email", "phone number", "mobile number", "address"]
+    sensitive_keywords = None #["bvn", "id number", "nin", "passport", "driver", "identificationnumber", "chn", "email", "phone number", "mobile number", "address"]
     hash_sensitive = not args.no_hash
     html_output_dir = args.html_output_dir or "html_profile"
     output_dir = args.output_dir or "metadata_profile"
