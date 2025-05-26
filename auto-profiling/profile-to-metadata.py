@@ -209,22 +209,24 @@ def _process_dataset(
     max_signed_int64 = np.iinfo(np.int64).max
     logging.info(f"Max signed int64 value: {max_signed_int64}")
     
+    # Handle large integer values that exceed int64 limits
+    max_signed_int64 = np.iinfo(np.int64).max
+    min_signed_int64 = np.iinfo(np.int64).min
+    
     for col in data.select_dtypes(include=['int', 'int64', 'uint64']).columns:
         try:
             col_max = data[col].max()
             col_min = data[col].min()
-            logging.info(f"Column '{col}': min={col_min}, max={col_max}, dtype={data[col].dtype}")
             
-            if col_max > max_signed_int64:
-                logging.warning(f"Column '{col}' has values exceeding int64 max! Converting to string.")
-                data[col] = data[col].astype(str)
-            elif col_min < np.iinfo(np.int64).min:
-                logging.warning(f"Column '{col}' has values below int64 min! Converting to string.")
-                data[col] = data[col].astype(str)
+            # Only log and convert if values are outside int64 range
+            if col_max > max_signed_int64 or col_min < min_signed_int64:
+                logging.warning(f"Column '{col}' has values outside int64 range (min: {col_min}, max: {col_max}, dtype: {data[col].dtype}). Converting to float64 to preserve numeric analysis.")
+                data[col] = data[col].astype('float64')
+            
         except Exception as e:
-            logging.error(f"Error checking column '{col}': {e}")
-            # Convert to string as a safe fallback
-            data[col] = data[col].astype(str)
+            logging.error(f"Error checking column '{col}': {e}. Converting to float64 as safe fallback.")
+            # Convert to float64 as a safe fallback that preserves numeric analysis
+            data[col] = data[col].astype('float64')
     
     # Detect sensitive columns if not provided
     if sensitive_keywords is None:
