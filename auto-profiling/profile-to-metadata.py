@@ -15,6 +15,7 @@ import logging
 import json
 import hashlib
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
 from ydata_profiling import ProfileReport
