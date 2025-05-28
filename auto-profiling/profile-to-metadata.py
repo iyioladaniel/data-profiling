@@ -242,8 +242,13 @@ def _process_dataset(
             if col in data.columns:
                 logging.info(f"Hashing sensitive column: {col}")
                 data[col] = hash_column(data[col])
+                
     # Configure ydata-profiling
     config = Settings()
+        
+    # Disable features that might cause issues with large numbers
+    config.vars.num.low_categorical_threshold = 0  # Don't treat numbers as categorical
+    
     if sensitive_columns:
         config.variables.descriptions = {col: "Sensitive Data (Hashed)" for col in sensitive_columns if col in data.columns}
         
@@ -282,6 +287,7 @@ def _process_dataset(
         output_html_path = os.path.join(html_output_dir, output_filename)
         profile.to_file(output_html_path)
         logging.info(f"Generated profiling report for {source_name} at {output_html_path}")
+        
     # Extract variables metadata from profiling JSON
     json_data = profile.to_json()
     variables_data = json.loads(json_data)['variables']
