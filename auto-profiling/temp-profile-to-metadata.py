@@ -206,8 +206,8 @@ def _process_dataset(
     total_records = len(data)
     
     # Add this diagnostic code to identify problematic columns
-    #max_signed_int64 = np.iinfo(np.int64).max
-    #logging.info(f"Max signed int64 value: {max_signed_int64}")
+    max_signed_int64 = np.iinfo(np.int64).max
+    logging.info(f"Max signed int64 value: {max_signed_int64}")
     
     # Handle large integer values that exceed int64 limits
     max_signed_int64 = np.iinfo(np.int64).max
@@ -247,7 +247,7 @@ def _process_dataset(
     config = Settings()
         
     # Disable features that might cause issues with large numbers
-    #config.vars.num.low_categorical_threshold = 0  # Don't treat numbers as categorical
+    config.vars.num.low_categorical_threshold = 0  # Don't treat numbers as categorical
     
     if sensitive_columns:
         config.variables.descriptions = {col: "Sensitive Data (Hashed)" for col in sensitive_columns if col in data.columns}
@@ -257,13 +257,7 @@ def _process_dataset(
     for col in data.columns:
         if 'date' in col.lower():
             type_schema[col] = "DateTime"
-    #set other columns as string to bypass signed integer is greater than max signed int64 error
-        elif pd.api.types.is_numeric_dtype(data[col]) or pd.api.types.is_integer_dtype(data[col]):
-            # Check if numeric column has values outside int64 range
-            if data[col].max() > max_signed_int64 or data[col].min() < min_signed_int64:
-                type_schema[col] = "Float64"
-        else: 
-            type_schema[col] = "String"
+        else: type_schema[col] = "String"  # Default to String for other columns
     
     # Generate profiling report based on profile_type
     if profile_type == "minimal":
