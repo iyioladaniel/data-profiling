@@ -251,22 +251,16 @@ def _process_dataset(
     
     if sensitive_columns:
         config.variables.descriptions = {col: "Sensitive Data (Hashed)" for col in sensitive_columns if col in data.columns}
-        
-    # Infer date columns and build type_schema
-    type_schema = {}
-    for col in data.columns:
-        if 'date' in col.lower():
-            type_schema[col] = "DateTime"
-    #set other columns as string to bypass signed integer is greater than max signed int64 error
-        elif pd.api.types.is_numeric_dtype(data[col]) or pd.api.types.is_integer_dtype(data[col]):
-            # Check if numeric column has values outside int64 range
-            if data[col].max() > max_signed_int64 or data[col].min() < min_signed_int64:
-                type_schema[col] = "Float64"
-        else: 
-            type_schema[col] = "String"
     
     # Generate profiling report based on profile_type
     if profile_type == "minimal":
+        # Infer date columns and build type_schema
+        type_schema = {}
+        for col in data.columns:
+            if 'date' in col.lower():
+                type_schema[col] = "DateTime"
+            #else: 
+            #    type_schema[col] = "Text"
         profile = ProfileReport(
             data,
             title=f"{source_name} Profiling Report",
@@ -284,9 +278,9 @@ def _process_dataset(
             data,
             title=f"{source_name} Profiling Report",
             explorative=True,
-            config=config,
-            type_schema=type_schema  # Pass the type schema for date columns
+            config=config
         )
+        
     # Save HTML report
     if html_output_dir:
         os.makedirs(html_output_dir, exist_ok=True)

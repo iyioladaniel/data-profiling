@@ -96,18 +96,44 @@ def render_sidebar_filters(df):
     with st.sidebar:
         st.header("🔍 Filters")
         
+        # Print column names for debugging
+        st.write("Available columns:", df.columns.tolist())
+        
         if st.button("Reset All Filters", use_container_width=True):
             return {"entity": [], "domain": [], "table": [], "field": "", 
                    "data_type": [], "nullable": "", "has_relationships": None}
         
         st.divider()
         
+        # Check if columns exist before accessing them
+        entity_options = []
+        domain_options = []
+        table_options = []
+        datatype_options = []
+        
+        if 'Entity' in df.columns:
+            entity_options = sorted([x for x in df['Entity'].unique() if pd.notna(x)])
+        
+        if 'Domain' in df.columns:
+            domain_options = sorted([x for x in df['Domain'].unique() if pd.notna(x)])
+        
+        if 'Table Name' in df.columns:
+            table_options = sorted([x for x in df['Table Name'].unique() if pd.notna(x)])
+            
+        # Check for different possible data type column names
+        data_type_col = None
+        for possible_name in ['Data Type', 'DataType', 'data_type', 'Datatype', 'Data_Type']:
+            if possible_name in df.columns:
+                data_type_col = possible_name
+                datatype_options = sorted([x for x in df[data_type_col].unique() if pd.notna(x)])
+                break
+        
         filters = {
-            "entity": st.multiselect("Entity", options=sorted(df['Entity'].unique())),
-            "domain": st.multiselect("Domain", options=sorted(df['Domain'].unique())),
-            "table": st.multiselect("Table Name", options=sorted(df['Table Name'].unique())),
+            "entity": st.multiselect("Entity", options=entity_options),
+            "domain": st.multiselect("Domain", options=domain_options),
+            "table": st.multiselect("Table Name", options=table_options),
             "field": st.text_input("Field Name"),
-            "data_type": st.multiselect("Data Type", options=sorted(df['Data Type'].unique())),
+            "data_type": st.multiselect("Data Type", options=datatype_options),
             "nullable": st.selectbox("Nullable", options=["", "Yes", "No"]),
             "has_relationships": st.radio(
                 "Relationship Status",
@@ -424,7 +450,7 @@ def render_cross_company_analysis(df):
 
 def main():
     # Load data
-    df = load_data("dummy_data_inventory.csv")
+    df = load_data("data_inventory.csv")
     
     # Render UI components
     render_header()
