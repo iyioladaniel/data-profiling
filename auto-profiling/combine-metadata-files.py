@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-combine_metadata.py - Combine all metadata_report.csv files into a single file
+combine-metadata-files.py - Combine all metadata_report.csv files into a single file
 
 This script recursively searches through a folder structure to find all
 metadata_report.csv files and combines them into a single comprehensive CSV file.
@@ -8,7 +8,7 @@ It handles files with different column structures, ensuring the core required
 columns are always included.
 
 Usage:
-    python combine_metadata.py source_folder [output_directory]
+    python combine-metadata-files.py source_folder [output_directory]
 """
 
 import os
@@ -16,6 +16,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 import logging
+import argparse
 
 # Set up logging
 logging.basicConfig(
@@ -133,26 +134,59 @@ def combine_metadata_files(file_list, output_dir=None):
     return output_path
 
 def main():
-    """Main execution function"""
-    # Check command line arguments
-    if len(sys.argv) < 2:
-        print("Usage: python combine_metadata.py source_folder [output_directory]")
-        return 1
+    """Main execution function with command-line argument parsing"""
+    # Set up argument parser with detailed help
+    parser = argparse.ArgumentParser(
+        description="Combine metadata_report.csv files from multiple directories into a single file",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python combine-metadata-files.py /path/to/source
+  python combine-metadata-files.py /path/to/source /path/to/output
+  python combine-metadata-files.py --log-level DEBUG /path/to/source
+        """
+    )
     
-    source_folder = sys.argv[1]
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    # Add arguments
+    parser.add_argument(
+        "source_folder", 
+        help="Root directory to search for metadata_report.csv files"
+    )
+    parser.add_argument(
+        "output_dir", 
+        nargs="?", 
+        default=None, 
+        help="Directory to save the combined metadata file (optional)"
+    )
+    parser.add_argument(
+        "--log-level", 
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set the logging level (default: INFO)"
+    )
+    parser.add_argument(
+        "--version", 
+        action="version", 
+        version="%(prog)s 1.0.0"
+    )
     
-    if not os.path.isdir(source_folder):
-        logger.error(f"Source folder does not exist: {source_folder}")
+    # Parse arguments
+    args = parser.parse_args()
+    
+    # Set logging level from command line argument
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    
+    if not os.path.isdir(args.source_folder):
+        logger.error(f"Source folder does not exist: {args.source_folder}")
         return 1
     
     # Find and combine metadata files
-    metadata_files = find_metadata_files(source_folder)
+    metadata_files = find_metadata_files(args.source_folder)
     if not metadata_files:
         logger.error("No metadata files found")
         return 1
     
-    output_path = combine_metadata_files(metadata_files, output_dir)
+    output_path = combine_metadata_files(metadata_files, args.output_dir)
     if output_path:
         logger.info("Successfully combined metadata files")
         return 0
